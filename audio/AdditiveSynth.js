@@ -43,16 +43,19 @@ export class AdditiveSynth {
 
   _computePartialDuration(baseDuration, partialNumber) {
     const damping = 1 + this.params.highDecayRate * (partialNumber - 1) * 0.45;
-    return Math.max(0.25, baseDuration / damping);
+    return Math.max(0.2, baseDuration / damping);
   }
 
   // --- SECTION C: Voice Synthesis & Playback ---
 
-  playFreq(fundamental, duration = 2.2, startTime = this.ctx.currentTime) {
+  playFreq(fundamental, duration = 2.2, startTime = this.ctx.currentTime, allowShort = false) {
     if (this.ctx.state === "suspended") this.ctx.resume();
 
-    // Ensure Hard Mode tones always have enough body to be heard clearly
-    const effectiveDuration = Math.max(2.0, duration * 1.6);
+    // Keep full sustain for chords/intervals, but allow crisp articulation for fast scale runs
+    const effectiveDuration = allowShort
+      ? Math.max(0.35, duration)
+      : Math.max(2.0, duration * 1.6);
+
     const activeSum = this.params.harmonics.reduce((sum, amp) => sum + amp, 0) || 1;
 
     this.params.harmonics.forEach((amplitude, idx) => {
@@ -72,7 +75,6 @@ export class AdditiveSynth {
 
       const peakGain = amplitude / activeSum;
       const attackTime = 0.02;
-      // Hold peak level briefly before decaying so tones don't feel clipped
       const holdTime = partialDuration * 0.35;
 
       env.gain.setValueAtTime(0.0001, startTime);
@@ -88,11 +90,11 @@ export class AdditiveSynth {
     });
   }
 
-  playChord(frequencies, { duration = 2.2, mode = "harmonic", stagger = 0.4 } = {}) {
+  playChord(frequencies, { duration = 2.2, mode = "harmonic", stagger = 0.4, allowShort = false } = {}) {
     const now = this.ctx.currentTime;
     frequencies.forEach((freq, index) => {
       const offset = mode === "melodic" ? index * stagger : 0;
-      this.playFreq(freq, duration, now + offset);
+      this.playFreq(freq, duration, now + offset, allowShort);
     });
   }
 }
