@@ -3,46 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ear Trainer — Theory & Notation Test</title>
-  <!-- Load Tone.js, Tonal.js, and VexFlow from CDN -->
+  <title>Harmonic Ear Trainer</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- External Audio, Music Theory, and Notation Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tonal/browser/tonal.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
 </head>
-<body style="font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px;">
-  <h1>Step 3: Theory & Notation Test</h1>
-  <p id="info">Click a button to generate a random interval, hear it, and see it on the staff.</p>
+<body>
+  <div class="app-shell">
+    <header>
+      <h1>Harmonic Ear Trainer</h1>
+      <span id="status-badge">Loading piano samples...</span>
+    </header>
 
-  <div style="margin-bottom: 16px;">
-    <button id="btn-asc">Random Ascending (Low → High)</button>
-    <button id="btn-desc">Random Descending (High → Low)</button>
-    <button id="btn-harm">Random Harmonic (Same Time)</button>
+    <!-- Controls & Harmonic Synth Lab injected by ControlsPanel.js -->
+    <div id="controls-container"></div>
+
+    <!-- Ear Training Answer Deck & Notation Reveal -->
+    <section class="panel-card">
+      <div class="section-header">
+        <h2>3. Identify the Interval</h2>
+      </div>
+      <div id="quiz-grid" class="quiz-grid"></div>
+      <p id="feedback-text">Click "New Interval" to begin.</p>
+      <div id="staff-container" class="staff-wrapper"></div>
+    </section>
   </div>
 
-  <div id="staff-box" style="border: 1px solid #ccc; border-radius: 8px; padding: 10px; min-height: 160px;"></div>
-
-  <script type="module">
-    import { SoundEngine } from "./audio/SoundEngine.js";
-    import { IntervalGenerator } from "./theory/IntervalGenerator.js";
-    import { StaffRenderer } from "./notation/StaffRenderer.js";
-
-    const engine = new SoundEngine();
-    const generator = new IntervalGenerator();
-    const staff = new StaffRenderer("staff-box");
-    const infoEl = document.getElementById("info");
-
-    async function runTest(direction) {
-      await Tone.start();
-      const exercise = generator.createExercise("random", direction);
-      infoEl.textContent = `Interval: ${exercise.interval.name} | Notes: ${exercise.notes.join(" → ")}`;
-      
-      engine.playChord(exercise.notes, { mode: exercise.playbackMode, stagger: 0.5 });
-      staff.renderNotes(exercise.notes, exercise.playbackMode);
-    }
-
-    document.getElementById("btn-asc").addEventListener("click", () => runTest("ascending"));
-    document.getElementById("btn-desc").addEventListener("click", () => runTest("descending"));
-    document.getElementById("btn-harm").addEventListener("click", () => runTest("harmonic"));
-  </script>
+  <script type="module" src="main.js"></script>
 </body>
 </html>
