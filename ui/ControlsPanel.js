@@ -1,7 +1,7 @@
 // ui/ControlsPanel.js
-// Manages the Training Controls, Metronome BPM slider, Tuning Selector, and Hard Mode Harmonic Rack
+// Manages Training Controls, Fixed/Random Root Note, Metronome BPM, Tuning, and Harmonic Rack
 
-import { INTERVALS } from "../theory/IntervalGenerator.js";
+import { INTERVALS, ROOT_POOL } from "../theory/IntervalGenerator.js";
 
 const SYNTH_PRESETS = {
   warm: {
@@ -49,6 +49,7 @@ export class ControlsPanel {
 
     this.state = {
       selectedInterval: "random",
+      rootNote: "random",
       direction: "ascending",
       bpm: 90,
       metronomeClick: false,
@@ -74,6 +75,13 @@ export class ControlsPanel {
       ),
     ].join("");
 
+    const rootOptions = [
+      `<option value="random">Random (Truly Random)</option>`,
+      ...ROOT_POOL.map(
+        (note) => `<option value="${note}">Fixed: ${note}</option>`
+      ),
+    ].join("");
+
     const harmonicSliders = this.synth.params.harmonics
       .map(
         (val, idx) => `
@@ -96,6 +104,11 @@ export class ControlsPanel {
         </div>
 
         <div class="controls-grid">
+          <label>
+            <span>First Note (Anchor)</span>
+            <select id="root-select">${rootOptions}</select>
+          </label>
+
           <label>
             <span>Interval Filter</span>
             <select id="interval-select">${intervalOptions}</select>
@@ -172,6 +185,10 @@ export class ControlsPanel {
 
     q("#mode-easy").addEventListener("click", () => this._setSoundMode("easy"));
     q("#mode-hard").addEventListener("click", () => this._setSoundMode("hard"));
+
+    q("#root-select").addEventListener("change", (e) => {
+      this.state.rootNote = e.target.value;
+    });
 
     q("#interval-select").addEventListener("change", (e) => {
       this.state.selectedInterval = e.target.value;
