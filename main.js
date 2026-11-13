@@ -64,7 +64,11 @@ const controls = new ControlsPanel(
   {
     onNewExercise: (opts) => {
       lastOptions = opts;
-      currentExercise = generator.createExercise(opts.selectedInterval, opts.direction);
+      currentExercise = generator.createExercise(
+        opts.selectedInterval,
+        opts.direction,
+        opts.rootNote
+      );
       staff.clear();
       feedbackText.textContent = "Listen and identify the interval below...";
       resetQuizButtons();
