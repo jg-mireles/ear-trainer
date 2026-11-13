@@ -1,5 +1,5 @@
 // audio/SoundEngine.js
-// Unified facade routing audio calls to Easy Mode (Piano) or Hard Mode (Synth)
+// Unified Audio Router: Switches seamlessly between Easy (Piano) and Hard (Additive Synth)
 
 import { PianoSampler } from "./PianoSampler.js";
 import { AdditiveSynth } from "./AdditiveSynth.js";
@@ -13,31 +13,23 @@ export class SoundEngine {
     this.tuning = new TuningSystem("12-TET");
   }
 
-  setMode(mode) {
-    if (mode === "easy" || mode === "hard") {
-      this.mode = mode;
-    }
+  setMode(newMode) {
+    this.mode = newMode === "hard" ? "hard" : "easy";
   }
 
-  setTuning(systemId) {
-    this.tuning.setSystem(systemId);
+  setTuning(tuningId) {
+    this.tuning.setSystem(tuningId);
   }
 
-  playNote(note, duration = 1.0) {
+  playChord(notes, { duration = 1.2, mode = "harmonic", stagger = 0.4, allowShort = false } = {}) {
+    if (!notes || notes.length === 0) return;
+
     if (this.mode === "easy") {
-      this.piano.playNote(note, duration);
+      this.piano.playChord(notes, { duration, mode, stagger });
     } else {
-      const [freq] = this.tuning.getFrequencies([note]);
-      this.synth.playFreq(freq, duration);
-    }
-  }
-
-  playChord(notes, options = { duration: 1.2, mode: "harmonic", stagger: 0.4 }) {
-    if (this.mode === "easy") {
-      this.piano.playChord(notes, options);
-    } else {
-      const freqs = this.tuning.getFrequencies(notes);
-      this.synth.playChord(freqs, options);
+      const rootNote = notes[0];
+      const freqs = notes.map((note) => this.tuning.getFrequency(note, rootNote));
+      this.synth.playChord(freqs, { duration, mode, stagger, allowShort });
     }
   }
 }
