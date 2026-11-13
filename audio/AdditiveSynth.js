@@ -42,15 +42,17 @@ export class AdditiveSynth {
   }
 
   _computePartialDuration(baseDuration, partialNumber) {
-    const damping = 1 + this.params.highDecayRate * (partialNumber - 1) * 0.6;
-    return Math.max(0.08, baseDuration / damping);
+    const damping = 1 + this.params.highDecayRate * (partialNumber - 1) * 0.45;
+    return Math.max(0.25, baseDuration / damping);
   }
 
   // --- SECTION C: Voice Synthesis & Playback ---
 
-  playFreq(fundamental, duration = 1.2, startTime = this.ctx.currentTime) {
+  playFreq(fundamental, duration = 2.2, startTime = this.ctx.currentTime) {
     if (this.ctx.state === "suspended") this.ctx.resume();
 
+    // Ensure Hard Mode tones always have enough body to be heard clearly
+    const effectiveDuration = Math.max(2.0, duration * 1.6);
     const activeSum = this.params.harmonics.reduce((sum, amp) => sum + amp, 0) || 1;
 
     this.params.harmonics.forEach((amplitude, idx) => {
@@ -58,7 +60,7 @@ export class AdditiveSynth {
 
       const partialNum = idx + 1;
       const freq = this._computePartialFreq(fundamental, partialNum);
-      const partialDuration = this._computePartialDuration(duration, partialNum);
+      const partialDuration = this._computePartialDuration(effectiveDuration, partialNum);
 
       if (freq > 20000) return;
 
@@ -69,19 +71,24 @@ export class AdditiveSynth {
       osc.frequency.setValueAtTime(freq, startTime);
 
       const peakGain = amplitude / activeSum;
+      const attackTime = 0.02;
+      // Hold peak level briefly before decaying so tones don't feel clipped
+      const holdTime = partialDuration * 0.35;
+
       env.gain.setValueAtTime(0.0001, startTime);
-      env.gain.linearRampToValueAtTime(peakGain, startTime + 0.015);
+      env.gain.linearRampToValueAtTime(peakGain, startTime + attackTime);
+      env.gain.setValueAtTime(peakGain, startTime + attackTime + holdTime);
       env.gain.exponentialRampToValueAtTime(0.0001, startTime + partialDuration);
 
       osc.connect(env);
       env.connect(this.masterGain);
 
       osc.start(startTime);
-      osc.stop(startTime + partialDuration + 0.02);
+      osc.stop(startTime + partialDuration + 0.03);
     });
   }
 
-  playChord(frequencies, { duration = 1.2, mode = "harmonic", stagger = 0.4 } = {}) {
+  playChord(frequencies, { duration = 2.2, mode = "harmonic", stagger = 0.4 } = {}) {
     const now = this.ctx.currentTime;
     frequencies.forEach((freq, index) => {
       const offset = mode === "melodic" ? index * stagger : 0;
