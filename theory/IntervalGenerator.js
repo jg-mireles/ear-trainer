@@ -1,5 +1,5 @@
 // theory/IntervalGenerator.js
-// Uses Tonal.js to spell intervals accurately and order notes by playback direction
+// Uses Tonal.js to spell intervals accurately and supports fixed or random starting notes
 
 export const INTERVALS = [
   { id: "m2", tonal: "2m", name: "Minor 2nd", semitones: 1 },
@@ -16,10 +16,10 @@ export const INTERVALS = [
   { id: "P8", tonal: "8P", name: "Octave", semitones: 12 },
 ];
 
-// Clean root notes in C3–F4 range so spelled intervals avoid double-sharps/flats
-const ROOT_POOL = [
+// Available starting notes for both random selection and the Fixed Note dropdown
+export const ROOT_POOL = [
   "C3", "D3", "Eb3", "E3", "F3", "G3", "Ab3", "A3", "Bb3", "B3",
-  "C4", "D4", "Eb4", "E4", "F4", "G4"
+  "C4", "D4", "Eb4", "E4", "F4", "G4", "A4", "Bb4", "B4", "C5"
 ];
 
 export class IntervalGenerator {
@@ -27,20 +27,31 @@ export class IntervalGenerator {
    * Builds a two-note exercise with proper enharmonic spelling
    * @param {string} intervalId - e.g., "P5" or "random"
    * @param {string} direction - "harmonic" | "ascending" | "descending"
+   * @param {string} rootNote - "random" or a specific note name (e.g., "C4")
    */
-  createExercise(intervalId = "random", direction = "ascending") {
+  createExercise(intervalId = "random", direction = "ascending", rootNote = "random") {
     const interval =
       intervalId === "random"
         ? INTERVALS[Math.floor(Math.random() * INTERVALS.length)]
         : INTERVALS.find((i) => i.id === intervalId) || INTERVALS[6];
 
-    const lowerNote = ROOT_POOL[Math.floor(Math.random() * ROOT_POOL.length)];
-    const upperNote = Tonal.Note.transpose(lowerNote, interval.tonal);
+    // Pick a random note from the safe middle pool (C3–G4) or use the user's fixed note
+    const safeRandomPool = ROOT_POOL.slice(0, 16);
+    const startNote =
+      rootNote === "random"
+        ? safeRandomPool[Math.floor(Math.random() * safeRandomPool.length)]
+        : rootNote;
 
-    const notes =
-      direction === "descending"
-        ? [upperNote, lowerNote]
-        : [lowerNote, upperNote];
+    let notes;
+    if (direction === "descending") {
+      // Start on the chosen note and step downward
+      const targetNote = Tonal.Note.transpose(startNote, `-${interval.tonal}`);
+      notes = [startNote, targetNote];
+    } else {
+      // Start on the chosen note and step upward (or play simultaneously)
+      const targetNote = Tonal.Note.transpose(startNote, interval.tonal);
+      notes = [startNote, targetNote];
+    }
 
     return {
       interval,
