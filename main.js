@@ -1,10 +1,10 @@
 // main.js
 // Orchestrates Audio, Theory, Notation, and UI modules
 
-import { SoundEngine } from "./audio/SoundEngine.js?v=18";
-import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=18";
-import { StaffRenderer } from "./notation/StaffRenderer.js?v=18";
-import { ControlsPanel } from "./ui/ControlsPanel.js?v=18";
+import { SoundEngine } from "./audio/SoundEngine.js?v=19";
+import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=19";
+import { StaffRenderer } from "./notation/StaffRenderer.js?v=19";
+import { ControlsPanel } from "./ui/ControlsPanel.js?v=19";
 
 const statusBadge = document.getElementById("status-badge");
 const feedbackText = document.getElementById("feedback-text");
@@ -46,7 +46,11 @@ async function playCurrentExercise(opts) {
   if (!currentExercise) return;
   clearContextTimers();
   await Tone.start();
+  if (engine.synth.ctx.state === "suspended") {
+    await engine.synth.ctx.resume();
+  }
 
+  engine.setMode(opts.soundMode);
   const stagger = opts.stagger;
   const delayBeforeNotes = opts.metronomeClick ? stagger * 2 : 0;
 
@@ -68,16 +72,26 @@ async function playCurrentExercise(opts) {
 }
 
 // Plays: 1) Tonic Triad (2 beats) -> 2) 1-Octave Scale Up -> 3) Exercise Interval (Low -> High)
+// Uses whichever sound mode (Easy Piano or Hard Synth configuration) is currently selected
 async function playContextSequence() {
   if (!currentExercise) return;
   clearContextTimers();
   await Tone.start();
+  if (engine.synth.ctx.state === "suspended") {
+    await engine.synth.ctx.resume();
+  }
+
+  // Ensure active sound mode & tuning match the current UI selection
+  if (controls) {
+    engine.setMode(controls.state.soundMode);
+    engine.setTuning(controls.state.tuning);
+  }
 
   const beat = controls ? controls.getStaggerSeconds() : 60 / 90;
   const { tonicChord, ascendingScale, sortedInterval } =
     generator.getContextSequence(currentExercise);
 
-  // Part 1: Tonic chord for 2 beats
+  // Part 1: Tonic chord for 2 beats (uses active Piano or Synth preset)
   const chordDuration = beat * 2;
   engine.playChord(tonicChord, {
     mode: "harmonic",
@@ -92,6 +106,7 @@ async function playContextSequence() {
       mode: "melodic",
       stagger: scaleStepSec,
       duration: scaleStepSec * 1.15,
+      allowShort: true,
     });
   }, scaleStartSec * 1000);
   contextTimers.push(scaleTimer);
@@ -178,7 +193,6 @@ function revealAnswer() {
     currentExercise.keySignature
   );
 
-  // Show the post-answer Context button
   contextBtn.classList.remove("hidden");
 
   const correctBtn = quizGrid.querySelector(`.quiz-btn[data-id="${currentExercise.interval.id}"]`);
