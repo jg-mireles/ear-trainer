@@ -1,7 +1,7 @@
 // ui/ControlsPanel.js
-// Manages Training Controls, Fixed/Random Root Note, Metronome BPM, Tuning, and Harmonic Rack
+// Manages Training Controls, Key/Scale Selection, Multi-Interval Toggle Deck, Fixed/Random Root, BPM, and Harmonic Rack
 
-import { INTERVALS, ROOT_POOL } from "../theory/IntervalGenerator.js";
+import { INTERVALS, ROOT_POOL, KEY_TONICS, SCALE_TYPES } from "../theory/IntervalGenerator.js?v=18";
 
 const SYNTH_PRESETS = {
   warm: {
@@ -35,7 +35,7 @@ export class ControlsPanel {
   constructor(
     containerEl,
     synthEngine,
-    { onNewExercise, onRepeat, onReveal, onModeChange, onTuningChange } = {}
+    { onNewExercise, onRepeat, onReveal, onModeChange, onTuningChange, onKeyChange } = {}
   ) {
     this.container = containerEl;
     this.synth = synthEngine;
@@ -45,10 +45,13 @@ export class ControlsPanel {
       onReveal,
       onModeChange,
       onTuningChange,
+      onKeyChange,
     };
 
     this.state = {
-      selectedInterval: "random",
+      keyTonic: "none",
+      scaleType: "major",
+      allowedIntervals: new Set(INTERVALS.map((i) => i.id)),
       rootNote: "random",
       direction: "ascending",
       bpm: 90,
@@ -65,15 +68,32 @@ export class ControlsPanel {
     return 60 / this.state.bpm;
   }
 
+  _getSnapshotState() {
+    return {
+      ...this.state,
+      allowedIntervals: Array.from(this.state.allowedIntervals),
+      stagger: this.getStaggerSeconds(),
+    };
+  }
+
   // --- SECTION A: HTML Template ---
 
   _render() {
-    const intervalOptions = [
-      `<option value="random">Random (All 12 Intervals)</option>`,
-      ...INTERVALS.map(
-        (int) => `<option value="${int.id}">${int.name} (${int.id})</option>`
-      ),
+    const keyOptions = [
+      `<option value="none">Any Key (Chromatic)</option>`,
+      ...KEY_TONICS.map((k) => `<option value="${k}">Key of ${k}</option>`),
     ].join("");
+
+    const scaleOptions = SCALE_TYPES.map(
+      (s) => `<option value="${s.id}">${s.label}</option>`
+    ).join("");
+
+    const intervalChips = INTERVALS.map(
+      (int) => `
+        <button type="button" class="interval-chip selected" data-id="${int.id}" title="${int.name}">
+          ${int.name} (${int.id})
+        </button>`
+    ).join("");
 
     const rootOptions = [
       `<option value="random">Random (Truly Random)</option>`,
@@ -105,13 +125,16 @@ export class ControlsPanel {
 
         <div class="controls-grid">
           <label>
-            <span>First Note (Anchor)</span>
-            <select id="root-select">${rootOptions}</select>
+            <span>Key / Scale Constraint</span>
+            <div style="display: flex; gap: 6px;">
+              <select id="key-select" style="flex: 1;">${keyOptions}</select>
+              <select id="scale-select" style="flex: 1.2;" disabled>${scaleOptions}</select>
+            </div>
           </label>
 
           <label>
-            <span>Interval Filter</span>
-            <select id="interval-select">${intervalOptions}</select>
+            <span>First Note (Anchor)</span>
+            <select id="root-select">${rootOptions}</select>
           </label>
 
           <label>
@@ -130,6 +153,18 @@ export class ControlsPanel {
               <input type="checkbox" id="click-toggle" /> Play 2-beat count-in click
             </small>
           </label>
+
+          <!-- Multi-Select Interval Pool -->
+          <div class="interval-filter-box">
+            <div class="interval-filter-header">
+              <span>Active Intervals (<strong id="active-count">${INTERVALS.length}</strong>/${INTERVALS.length})</span>
+              <div class="filter-quick-btns">
+                <button type="button" id="intervals-all" class="mini-btn">All</button>
+                <button type="button" id="intervals-none" class="mini-btn">None</button>
+              </div>
+            </div>
+            <div id="interval-chips" class="interval-chips">${intervalChips}</div>
+          </div>
         </div>
 
         <div class="action-row">
@@ -180,18 +215,64 @@ export class ControlsPanel {
 
   // --- SECTION B: Event Bindings ---
 
+  _syncIntervalChipsUI() {
+    const countEl = this.container.querySelector("#active-count");
+    if (countEl) countEl.textContent = this.state.allowedIntervals.size;
+
+    this.container.querySelectorAll(".interval-chip").forEach((chip) => {
+      const isSelected = this.state.allowedIntervals.has(chip.dataset.id);
+      chip.classList.toggle("selected", isSelected);
+    });
+  }
+
   _bindEvents() {
     const q = (sel) => this.container.querySelector(sel);
 
     q("#mode-easy").addEventListener("click", () => this._setSoundMode("easy"));
     q("#mode-hard").addEventListener("click", () => this._setSoundMode("hard"));
 
+    const notifyKeyChange = () => {
+      if (this.callbacks.onKeyChange) {
+        this.callbacks.onKeyChange(this.state.keyTonic, this.state.scaleType);
+      }
+    };
+
+    q("#key-select").addEventListener("change", (e) => {
+      this.state.keyTonic = e.target.value;
+      q("#scale-select").disabled = this.state.keyTonic === "none";
+      notifyKeyChange();
+    });
+
+    q("#scale-select").addEventListener("change", (e) => {
+      this.state.scaleType = e.target.value;
+      notifyKeyChange();
+    });
+
     q("#root-select").addEventListener("change", (e) => {
       this.state.rootNote = e.target.value;
     });
 
-    q("#interval-select").addEventListener("change", (e) => {
-      this.state.selectedInterval = e.target.value;
+    // Multi-select interval chip toggles
+    this.container.querySelectorAll(".interval-chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const id = chip.dataset.id;
+        if (this.state.allowedIntervals.has(id)) {
+          this.state.allowedIntervals.delete(id);
+        } else {
+          this.state.allowedIntervals.add(id);
+        }
+        this._syncIntervalChipsUI();
+      });
+    });
+
+    q("#intervals-all").addEventListener("click", () => {
+      this.state.allowedIntervals = new Set(INTERVALS.map((i) => i.id));
+      this._syncIntervalChipsUI();
+    });
+
+    q("#intervals-none").addEventListener("click", () => {
+      this.state.allowedIntervals.clear();
+      this._syncIntervalChipsUI();
     });
 
     q("#direction-select").addEventListener("change", (e) => {
@@ -208,14 +289,19 @@ export class ControlsPanel {
     });
 
     q("#btn-new").addEventListener("click", () => {
+      // Auto-reselect all if user cleared everything before hitting New Interval
+      if (this.state.allowedIntervals.size === 0) {
+        this.state.allowedIntervals = new Set(INTERVALS.map((i) => i.id));
+        this._syncIntervalChipsUI();
+      }
       if (this.callbacks.onNewExercise) {
-        this.callbacks.onNewExercise({ ...this.state, stagger: this.getStaggerSeconds() });
+        this.callbacks.onNewExercise(this._getSnapshotState());
       }
     });
 
     q("#btn-repeat").addEventListener("click", () => {
       if (this.callbacks.onRepeat) {
-        this.callbacks.onRepeat({ ...this.state, stagger: this.getStaggerSeconds() });
+        this.callbacks.onRepeat(this._getSnapshotState());
       }
     });
 
