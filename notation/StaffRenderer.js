@@ -1,17 +1,47 @@
 // notation/StaffRenderer.js
-// Renders intervals and chords onto an SVG musical staff using VexFlow
+// Renders an empty stave with key signature, and reveals notes with smart key-aware accidentals
 
 export class StaffRenderer {
-  constructor(containerId, { width = 340, height = 160, clef = "treble" } = {}) {
+  constructor(containerId, { width = 360, height = 165, clef = "treble" } = {}) {
     this.containerId = containerId;
     this.width = width;
     this.height = height;
     this.clef = clef;
+    this.currentKeySignature = null;
   }
 
-  clear() {
-    const el = document.getElementById(this.containerId);
-    if (el) el.innerHTML = "";
+  setKeySignature(keySignature) {
+    this.currentKeySignature = keySignature || null;
+    this.renderEmptyStaff(this.currentKeySignature);
+  }
+
+  _createStaveAndContext() {
+    const container = document.getElementById(this.containerId);
+    if (!container) return null;
+    container.innerHTML = "";
+
+    const { Renderer, Stave } = Vex.Flow;
+    const renderer = new Renderer(container, Renderer.Backends.SVG);
+    renderer.resize(this.width, this.height);
+
+    const context = renderer.getContext();
+    const stave = new Stave(10, 22, this.width - 20);
+    stave.addClef(this.clef);
+
+    if (this.currentKeySignature) {
+      stave.addKeySignature(this.currentKeySignature);
+    }
+
+    stave.setContext(context).draw();
+    return { context, stave };
+  }
+
+  /**
+   * Draws just the clef and key signature (used when starting/hiding an exercise)
+   */
+  renderEmptyStaff(keySignature = this.currentKeySignature) {
+    this.currentKeySignature = keySignature || null;
+    this._createStaveAndContext();
   }
 
   _toVexKey(noteName) {
@@ -20,31 +50,20 @@ export class StaffRenderer {
     return `${match[1].toLowerCase()}/${match[2]}`;
   }
 
-  _getAccidental(noteName) {
-    const match = noteName.match(/^[A-Ga-g]([#b])\d+$/);
-    return match ? match[1] : null;
-  }
-
   /**
-   * Draws notes either stacked (harmonic) or side-by-side (melodic)
+   * Draws notes either stacked (harmonic) or side-by-side (melodic), applying key-aware accidentals
    */
-  renderNotes(notes, mode = "harmonic") {
-    this.clear();
+  renderNotes(notes, mode = "harmonic", keySignature = this.currentKeySignature) {
+    this.currentKeySignature = keySignature || null;
+    const setup = this._createStaveAndContext();
+    if (!setup) return;
 
-    const { Renderer, Stave, StaveNote, Accidental, Voice, Formatter } = Vex.Flow;
-
-    const container = document.getElementById(this.containerId);
-    const renderer = new Renderer(container, Renderer.Backends.SVG);
-    renderer.resize(this.width, this.height);
-
-    const context = renderer.getContext();
-    const stave = new Stave(10, 20, this.width - 20);
-    stave.addClef(this.clef).setContext(context).draw();
+    const { context, stave } = setup;
+    const { StaveNote, Accidental, Voice, Formatter } = Vex.Flow;
 
     let staveNotes = [];
 
     if (mode === "harmonic") {
-      // Sort low-to-high so VexFlow stacks chord heads cleanly
       const sorted = [...notes].sort(
         (a, b) => Tonal.Note.midi(a) - Tonal.Note.midi(b)
       );
@@ -54,31 +73,25 @@ export class StaffRenderer {
         duration: "w",
         clef: this.clef,
       });
-
-      sorted.forEach((n, index) => {
-        const acc = this._getAccidental(n);
-        if (acc) chordNote.addModifier(new Accidental(acc), index);
-      });
-
       staveNotes = [chordNote];
     } else {
-      staveNotes = notes.map((n) => {
-        const singleNote = new StaveNote({
-          keys: [this._toVexKey(n)],
-          duration: "h",
-          clef: this.clef,
-        });
-
-        const acc = this._getAccidental(n);
-        if (acc) singleNote.addModifier(new Accidental(acc), 0);
-        return singleNote;
-      });
+      staveNotes = notes.map(
+        (n) =>
+          new StaveNote({
+            keys: [this._toVexKey(n)],
+            duration: "h",
+            clef: this.clef,
+          })
+      );
     }
 
     const voice = new Voice({ num_beats: 4, beat_value: 4 });
     voice.addTickables(staveNotes);
 
-    new Formatter().joinVoices([voice]).format([voice], this.width - 80);
+    // Automatically adds/suppresses accidentals based on the active key signature
+    Accidental.applyAccidentals([voice], this.currentKeySignature || "C");
+
+    new Formatter().joinVoices([voice]).format([voice], this.width - 110);
     voice.draw(context, stave);
   }
 }
