@@ -3,36 +3,46 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ear Trainer — Audio Test</title>
-  <!-- Load Tone.js from CDN -->
+  <title>Ear Trainer — Theory & Notation Test</title>
+  <!-- Load Tone.js, Tonal.js, and VexFlow from CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tonal/browser/tonal.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
 </head>
 <body style="font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px;">
-  <h1>Step 2: Audio Engine Test</h1>
-  <p id="status">Loading piano samples...</p>
+  <h1>Step 3: Theory & Notation Test</h1>
+  <p id="info">Click a button to generate a random interval, hear it, and see it on the staff.</p>
 
-  <button id="test-piano">Test Easy Mode (Piano C4 → G4)</button>
-  <button id="test-synth">Test Hard Mode (Synth C4 → G4)</button>
+  <div style="margin-bottom: 16px;">
+    <button id="btn-asc">Random Ascending (Low → High)</button>
+    <button id="btn-desc">Random Descending (High → Low)</button>
+    <button id="btn-harm">Random Harmonic (Same Time)</button>
+  </div>
+
+  <div id="staff-box" style="border: 1px solid #ccc; border-radius: 8px; padding: 10px; min-height: 160px;"></div>
 
   <script type="module">
     import { SoundEngine } from "./audio/SoundEngine.js";
+    import { IntervalGenerator } from "./theory/IntervalGenerator.js";
+    import { StaffRenderer } from "./notation/StaffRenderer.js";
 
-    const statusEl = document.getElementById("status");
-    const engine = new SoundEngine(() => {
-      statusEl.textContent = "✅ Piano samples loaded! Ready to test.";
-    });
+    const engine = new SoundEngine();
+    const generator = new IntervalGenerator();
+    const staff = new StaffRenderer("staff-box");
+    const infoEl = document.getElementById("info");
 
-    document.getElementById("test-piano").addEventListener("click", async () => {
+    async function runTest(direction) {
       await Tone.start();
-      engine.setMode("easy");
-      engine.playChord(["C4", "G4"], { mode: "melodic", stagger: 0.5 });
-    });
+      const exercise = generator.createExercise("random", direction);
+      infoEl.textContent = `Interval: ${exercise.interval.name} | Notes: ${exercise.notes.join(" → ")}`;
+      
+      engine.playChord(exercise.notes, { mode: exercise.playbackMode, stagger: 0.5 });
+      staff.renderNotes(exercise.notes, exercise.playbackMode);
+    }
 
-    document.getElementById("test-synth").addEventListener("click", async () => {
-      await Tone.start();
-      engine.setMode("hard");
-      engine.playChord(["C4", "G4"], { mode: "melodic", stagger: 0.5 });
-    });
+    document.getElementById("btn-asc").addEventListener("click", () => runTest("ascending"));
+    document.getElementById("btn-desc").addEventListener("click", () => runTest("descending"));
+    document.getElementById("btn-harm").addEventListener("click", () => runTest("harmonic"));
   </script>
 </body>
 </html>
