@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ear Trainer — Audio Test</title>
+  <!-- Load Tone.js from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+</head>
+<body style="font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px;">
+  <h1>Step 2: Audio Engine Test</h1>
+  <p id="status">Loading piano samples...</p>
+
+  <button id="test-piano">Test Easy Mode (Piano C4 → G4)</button>
+  <button id="test-synth">Test Hard Mode (Synth C4 → G4)</button>
+
+  <script type="module">
+    import { SoundEngine } from "./audio/SoundEngine.js";
+
+    const statusEl = document.getElementById("status");
+    const engine = new SoundEngine(() => {
+      statusEl.textContent = "✅ Piano samples loaded! Ready to test.";
+    });
+
+    document.getElementById("test-piano").addEventListener("click", async () => {
+      await Tone.start();
+      engine.setMode("easy");
+      engine.playChord(["C4", "G4"], { mode: "melodic", stagger: 0.5 });
+    });
+
+    document.getElementById("test-synth").addEventListener("click", async () => {
+      await Tone.start();
+      engine.setMode("hard");
+      engine.playChord(["C4", "G4"], { mode: "melodic", stagger: 0.5 });
+    });
+  </script>
+</body>
+</html>
