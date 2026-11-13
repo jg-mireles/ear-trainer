@@ -138,4 +138,130 @@ export class ControlsPanel {
             </select>
             <select id="preset-select" aria-label="Timbre Presets">
               <option value="warm">Preset: Warm Saw-ish</option>
-              <option value="sine">Presetui/ControlsPanel.js
+              <option value="sine">Preset: Pure Sine (Fundamental Only)</option>
+              <option value="clarinet">Preset: Odd Harmonics (Clarinet)</option>
+              <option value="stretched">Preset: Stretched String (Inharmonic)</option>
+              <option value="bell">Preset: Metallic Bell</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="harmonics-rack">${harmonicSliders}</div>
+
+        <div class="physics-grid">
+          <label>
+            <span>Inharmonicity Stretch (B): <strong id="stretch-val">${this.synth.params.inharmonicity}</strong></span>
+            <input id="stretch-slider" type="range" min="0" max="0.05" step="0.0005"
+                   value="${this.synth.params.inharmonicity}" />
+          </label>
+
+          <label>
+            <span>High-Harmonic Decay: <strong id="decay-val">${this.synth.params.highDecayRate}</strong></span>
+            <input id="decay-slider" type="range" min="0" max="1" step="0.05"
+                   value="${this.synth.params.highDecayRate}" />
+          </label>
+        </div>
+      </div>
+    `;
+  }
+
+  // --- SECTION B: Event Bindings ---
+
+  _bindEvents() {
+    const q = (sel) => this.container.querySelector(sel);
+
+    q("#mode-easy").addEventListener("click", () => this._setSoundMode("easy"));
+    q("#mode-hard").addEventListener("click", () => this._setSoundMode("hard"));
+
+    q("#interval-select").addEventListener("change", (e) => {
+      this.state.selectedInterval = e.target.value;
+    });
+
+    q("#direction-select").addEventListener("change", (e) => {
+      this.state.direction = e.target.value;
+    });
+
+    q("#bpm-slider").addEventListener("input", (e) => {
+      this.state.bpm = Number(e.target.value);
+      q("#bpm-val").textContent = this.state.bpm;
+    });
+
+    q("#click-toggle").addEventListener("change", (e) => {
+      this.state.metronomeClick = e.target.checked;
+    });
+
+    q("#btn-new").addEventListener("click", () => {
+      if (this.callbacks.onNewExercise) {
+        this.callbacks.onNewExercise({ ...this.state, stagger: this.getStaggerSeconds() });
+      }
+    });
+
+    q("#btn-repeat").addEventListener("click", () => {
+      if (this.callbacks.onRepeat) {
+        this.callbacks.onRepeat({ ...this.state, stagger: this.getStaggerSeconds() });
+      }
+    });
+
+    q("#btn-reveal").addEventListener("click", () => {
+      if (this.callbacks.onReveal) this.callbacks.onReveal();
+    });
+
+    q("#tuning-select").addEventListener("change", (e) => {
+      this.state.tuning = e.target.value;
+      if (this.callbacks.onTuningChange) {
+        this.callbacks.onTuningChange(e.target.value);
+      }
+    });
+
+    this.container.querySelectorAll(".harm-slider").forEach((slider) => {
+      slider.addEventListener("input", (e) => {
+        const idx = Number(e.target.dataset.index);
+        this.synth.setHarmonic(idx, Number(e.target.value));
+      });
+    });
+
+    q("#stretch-slider").addEventListener("input", (e) => {
+      const val = Number(e.target.value);
+      this.synth.setInharmonicity(val);
+      q("#stretch-val").textContent = val;
+    });
+
+    q("#decay-slider").addEventListener("input", (e) => {
+      const val = Number(e.target.value);
+      this.synth.setHighDecayRate(val);
+      q("#decay-val").textContent = val;
+    });
+
+    q("#preset-select").addEventListener("change", (e) => {
+      const preset = SYNTH_PRESETS[e.target.value];
+      if (!preset) return;
+
+      preset.harmonics.forEach((amp, idx) => {
+        this.synth.setHarmonic(idx, amp);
+        const slider = this.container.querySelector(`.harm-slider[data-index="${idx}"]`);
+        if (slider) slider.value = amp;
+      });
+
+      this.synth.setInharmonicity(preset.inharmonicity);
+      q("#stretch-slider").value = preset.inharmonicity;
+      q("#stretch-val").textContent = preset.inharmonicity;
+
+      this.synth.setHighDecayRate(preset.highDecayRate);
+      q("#decay-slider").value = preset.highDecayRate;
+      q("#decay-val").textContent = preset.highDecayRate;
+    });
+  }
+
+  _setSoundMode(mode) {
+    this.state.soundMode = mode;
+    const easyBtn = this.container.querySelector("#mode-easy");
+    const hardBtn = this.container.querySelector("#mode-hard");
+    const rack = this.container.querySelector("#synth-rack");
+
+    easyBtn.classList.toggle("active", mode === "easy");
+    hardBtn.classList.toggle("active", mode === "hard");
+    rack.classList.toggle("hidden", mode === "easy");
+
+    if (this.callbacks.onModeChange) this.callbacks.onModeChange(mode);
+  }
+}
