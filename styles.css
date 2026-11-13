@@ -1,3 +1,105 @@
+:root {
+  --bg: #0f172a;
+  --card: #1e293b;
+  --border: #334155;
+  --text: #f8fafc;
+  --muted: #94a3b8;
+  --accent: #38bdf8;
+  --accent-hover: #0284c7;
+  --success: #22c55e;
+  --danger: #ef4444;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.app-shell {
+  max-width: 820px;
+  margin: 32px auto;
+  padding: 0 20px;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+header h1 { margin: 0; font-size: 1.5rem; }
+#status-badge { font-size: 0.85rem; color: var(--muted); }
+
+.panel-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 18px;
+}
+
+.hidden { display: none; }
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.section-header h2 { margin: 0; font-size: 1.05rem; color: var(--accent); }
+
+.controls-grid, .physics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+label { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; }
+
+select, button {
+  font: inherit;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.mode-toggle button.active {
+  background: var(--accent);
+  color: #0f172a;
+  font-weight: 600;
+  border-color: var(--accent);
+}
+
+.action-row { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.primary-btn {
+  background: var(--accent);
+  color: #0f172a;
+  font-weight: 600;
+  border: none;
+}
+.primary-btn:hover { background: var(--accent-hover); color: #fff; }
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
 /* Multi-Select Interval Filter Pills */
 .interval-filter-box {
   grid-column: 1 / -1;
@@ -48,3 +150,55 @@
   border-color: var(--accent);
   font-weight: 600;
 }
+
+/* Harmonic Sliders */
+.harmonics-rack {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 8px;
+  background: var(--bg);
+  padding: 14px 10px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.harmonic-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.harmonic-col input[type="range"] {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  height: 95px;
+  width: 24px;
+  cursor: pointer;
+}
+
+/* Quiz Answer Buttons & Staff */
+.quiz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.quiz-btn.correct { background: var(--success); color: #052e16; font-weight: 600; }
+.quiz-btn.wrong { background: var(--danger); color: #fff; }
+
+.staff-wrapper {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 10px;
+  min-height: 165px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 14px;
+}
+
+#feedback-text { font-weight: 600; min-height: 1.5em; margin: 10px 0 0; }
