@@ -1,5 +1,5 @@
 // theory/IntervalGenerator.js
-// Generates intervals using explicit scale formulas and safe VexFlow key signature mapping
+// Generates intervals using explicit scale formulas, multi-interval filtering, and safe VexFlow key signatures
 
 export const INTERVALS = [
   { id: "m2", tonal: "2m", name: "Minor 2nd", semitones: 1 },
@@ -42,7 +42,6 @@ export const SCALE_TYPES = [
   },
 ];
 
-// Enharmonic spelling guard so minor keys like Db minor spell cleanly as C# minor
 const MINOR_TONIC_MAP = {
   Db: "C#",
   Gb: "F#",
@@ -59,9 +58,6 @@ export class IntervalGenerator {
     return MAJOR_TONIC_MAP[keyTonic] || keyTonic;
   }
 
-  /**
-   * Returns a VexFlow-supported key signature string (e.g. "C", "Bb", "Am", "G#m") or null
-   */
   getVexKeySignature(keyTonic, scaleType) {
     if (!keyTonic || keyTonic === "none") return null;
     const scaleMeta = SCALE_TYPES.find((s) => s.id === scaleType) || SCALE_TYPES[0];
@@ -71,9 +67,6 @@ export class IntervalGenerator {
     return scaleMeta.isMinor ? `${cleanTonic}m` : cleanTonic;
   }
 
-  /**
-   * Builds concrete notes (C3..C5) by transposing the resolved tonic by exact scale intervals
-   */
   _getScaleNotesInRange(keyTonic, scaleType) {
     const scaleMeta = SCALE_TYPES.find((s) => s.id === scaleType) || SCALE_TYPES[0];
     const cleanTonic = this._resolveTonic(keyTonic, scaleMeta.isMinor);
@@ -93,12 +86,6 @@ export class IntervalGenerator {
     return concreteNotes.sort((a, b) => Tonal.Note.midi(a) - Tonal.Note.midi(b));
   }
 
-  /**
-   * Builds the post-answer context sequence:
-   * 1. Tonic triad (1-3-5)
-   * 2. One-octave ascending scale
-   * 3. Exercise interval sorted lower -> higher
-   */
   getContextSequence(exercise) {
     const sortedInterval = [...exercise.notes].sort(
       (a, b) => Tonal.Note.midi(a) - Tonal.Note.midi(b)
@@ -113,7 +100,6 @@ export class IntervalGenerator {
     const baseOctave = Tonal.Note.octave(sortedInterval[0]) <= 3 ? 3 : 4;
     const tonicRoot = `${cleanTonic}${baseOctave}`;
 
-    // 1. Tonic Triad (Root, 3rd, 5th)
     const thirdInterval = isMinor ? "3m" : "3M";
     const tonicChord = [
       tonicRoot,
@@ -121,7 +107,6 @@ export class IntervalGenerator {
       Tonal.Note.transpose(tonicRoot, "5P"),
     ];
 
-    // 2. One-Octave Ascending Scale
     const activeIntervals = hasKey ? scaleMeta.intervals : SCALE_TYPES[0].intervals;
     const ascendingScale = activeIntervals.map((ivl) =>
       Tonal.Note.transpose(tonicRoot, ivl)
@@ -136,18 +121,21 @@ export class IntervalGenerator {
   }
 
   createExercise({
-    intervalId = "random",
+    allowedIntervals = INTERVALS.map((i) => i.id),
     direction = "ascending",
     rootNote = "random",
     keyTonic = "none",
     scaleType = "major",
   } = {}) {
-    if (!keyTonic || keyTonic === "none") {
-      const interval =
-        intervalId === "random"
-          ? INTERVALS[Math.floor(Math.random() * INTERVALS.length)]
-          : INTERVALS.find((i) => i.id === intervalId) || INTERVALS[6];
+    // Ensure at least one interval is active
+    const activePool =
+      Array.isArray(allowedIntervals) && allowedIntervals.length > 0
+        ? INTERVALS.filter((i) => allowedIntervals.includes(i.id))
+        : INTERVALS;
 
+    // --- MODE A: Chromatic (Any Key) ---
+    if (!keyTonic || keyTonic === "none") {
+      const interval = activePool[Math.floor(Math.random() * activePool.length)];
       const safeRandomPool = ROOT_POOL.slice(0, 16);
       const startNote =
         rootNote === "random"
@@ -170,7 +158,9 @@ export class IntervalGenerator {
       };
     }
 
+    // --- MODE B: Diatonic Scale Pairs ---
     const scaleNotes = this._getScaleNotesInRange(keyTonic, scaleType);
+    const allowedIds = new Set(activePool.map((i) => i.id));
     const validPairs = [];
 
     for (let i = 0; i < scaleNotes.length; i++) {
@@ -183,13 +173,11 @@ export class IntervalGenerator {
         if (Math.abs(diff) < 1 || Math.abs(diff) > 12) continue;
         if (direction === "descending" && diff >= 0) continue;
         if ((direction === "ascending" || direction === "harmonic") && diff <= 0) continue;
-
         if (rootNote !== "random" && Tonal.Note.midi(n1) !== Tonal.Note.midi(rootNote)) continue;
 
         const semitones = Math.abs(diff);
         const matchedInterval = INTERVALS.find((int) => int.semitones === semitones);
-        if (!matchedInterval) continue;
-        if (intervalId !== "random" && matchedInterval.id !== intervalId) continue;
+        if (!matchedInterval || !allowedIds.has(matchedInterval.id)) continue;
 
         validPairs.push({
           interval: matchedInterval,
@@ -198,9 +186,10 @@ export class IntervalGenerator {
       }
     }
 
+    // If strict anchor note has no matches for selected intervals, relax anchor once
     if (validPairs.length === 0 && rootNote !== "random") {
       return this.createExercise({
-        intervalId,
+        allowedIntervals,
         direction,
         rootNote: "random",
         keyTonic,
