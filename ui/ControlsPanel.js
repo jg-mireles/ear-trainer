@@ -1,7 +1,7 @@
 // ui/ControlsPanel.js
 // Manages Training Controls, Key/Scale Selection (Specific or Random), Multi-Interval Pills, and Synth Lab
 
-import { INTERVALS, KEY_TONICS, SCALE_TYPES } from "../theory/IntervalGenerator.js?v=24";
+import { INTERVALS, KEY_TONICS, SCALE_TYPES } from "../theory/IntervalGenerator.js?v=25";
 
 const SYNTH_PRESETS = {
   warm: {
