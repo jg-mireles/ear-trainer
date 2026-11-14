@@ -1,10 +1,10 @@
 // main.js
 // Orchestrates Audio, Theory, Notation, and UI modules
 
-import { SoundEngine } from "./audio/SoundEngine.js?v=22";
-import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=22";
-import { StaffRenderer } from "./notation/StaffRenderer.js?v=22";
-import { ControlsPanel } from "./ui/ControlsPanel.js?v=22";
+import { SoundEngine } from "./audio/SoundEngine.js?v=23";
+import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=23";
+import { StaffRenderer } from "./notation/StaffRenderer.js?v=23";
+import { ControlsPanel } from "./ui/ControlsPanel.js?v=23";
 
 const statusBadge = document.getElementById("status-badge");
 const feedbackText = document.getElementById("feedback-text");
@@ -23,6 +23,12 @@ staff.renderEmptyStaff(generator.getVexKeySignature("C", "major"));
 
 let currentExercise = null;
 let lastOptions = null;
+let playbackTimers = [];
+
+function clearPlaybackTimers() {
+  playbackTimers.forEach((id) => clearTimeout(id));
+  playbackTimers = [];
+}
 
 function playMetronomeClick(time) {
   const ctx = Tone.context.rawContext;
@@ -39,11 +45,13 @@ function playMetronomeClick(time) {
 
 async function playCurrentExercise(opts) {
   if (!currentExercise) return;
+  clearPlaybackTimers();
   await Tone.start();
   if (engine.synth?.ctx?.state === "suspended") {
     await engine.synth.ctx.resume();
   }
   engine.setMode(opts.soundMode);
+  engine.setTuning(opts.tuning);
 
   const stagger = opts.stagger;
   const delayBeforeNotes = opts.metronomeClick ? stagger * 2 : 0;
@@ -54,41 +62,52 @@ async function playCurrentExercise(opts) {
     playMetronomeClick(now + stagger);
   }
 
-  setTimeout(() => {
+  const timerId = setTimeout(() => {
     engine.playChord(currentExercise.notes, {
       mode: currentExercise.playbackMode,
       stagger,
       duration: Math.max(1.1, stagger * 1.2),
     });
   }, delayBeforeNotes * 1000);
+
+  playbackTimers.push(timerId);
 }
 
-// Plays: 1) Tonic Triad -> 2) 1-Octave Ascending Scale -> 3) Exercise Interval (Low -> High)
+// Plays and draws in sync:
+// 1) Tonic Triad -> 2) 1-Octave Ascending Scale -> 3) Exercise Interval (Low -> High)
 async function playContextSequence() {
   if (!currentExercise) return;
+  clearPlaybackTimers();
   await Tone.start();
   if (engine.synth?.ctx?.state === "suspended") {
     await engine.synth.ctx.resume();
   }
+
   engine.setMode(controls.state.soundMode);
+  engine.setTuning(controls.state.tuning);
 
   const stagger = controls.getStaggerSeconds();
   const seq = generator.getContextSequence(currentExercise);
+  const keySig = currentExercise.keySignature;
 
   const chordDuration = stagger * 2;
-  const scaleStepSec = Math.max(0.22, stagger * 0.5);
+  const scaleStepSec = Math.max(0.24, stagger * 0.5);
   const scaleTotalSec = seq.ascendingScale.length * scaleStepSec;
   const pauseAfterChord = 0.25;
   const pauseAfterScale = 0.35;
 
-  // 1. Tonic Triad (2 beats)
+  // 1. Tonic Triad (Audio + Grand Staff)
+  feedbackText.textContent = `Context 1/3 — Tonic Triad (${seq.triad.join(" - ")})`;
+  staff.renderNotes(seq.triad, "harmonic", keySig);
   engine.playChord(seq.triad, {
     mode: "harmonic",
     duration: chordDuration,
   });
 
-  // 2. 1-Octave Ascending Scale
-  setTimeout(() => {
+  // 2. 1-Octave Ascending Scale (Audio + Grand Staff)
+  const scaleTimer = setTimeout(() => {
+    feedbackText.textContent = `Context 2/3 — Ascending Scale (${seq.ascendingScale.join(" → ")})`;
+    staff.renderNotes(seq.ascendingScale, "melodic", keySig);
     engine.playChord(seq.ascendingScale, {
       mode: "melodic",
       stagger: scaleStepSec,
@@ -96,15 +115,22 @@ async function playContextSequence() {
       allowShort: true,
     });
   }, (chordDuration + pauseAfterChord) * 1000);
+  playbackTimers.push(scaleTimer);
 
-  // 3. Target Interval (Lower -> Higher)
-  setTimeout(() => {
+  // 3. Target Exercise Interval Lower -> Higher (Audio + Grand Staff)
+  const intervalTimer = setTimeout(() => {
+    const keyTag = currentExercise.activeKeyTonic
+      ? ` [${currentExercise.activeKeyLabel}]`
+      : "";
+    feedbackText.textContent = `Context 3/3 — Target Interval: ${currentExercise.interval.name} (${seq.intervalAscending.join(" → ")})${keyTag}`;
+    staff.renderNotes(seq.intervalAscending, "melodic", keySig);
     engine.playChord(seq.intervalAscending, {
       mode: "melodic",
       stagger,
       duration: Math.max(1.1, stagger * 1.2),
     });
   }, (chordDuration + pauseAfterChord + scaleTotalSec + pauseAfterScale) * 1000);
+  playbackTimers.push(intervalTimer);
 }
 
 // 2. Initialize Controls Panel
@@ -113,6 +139,7 @@ const controls = new ControlsPanel(
   engine.synth,
   {
     onKeyChange: (keyTonic, scaleType) => {
+      clearPlaybackTimers();
       if (keyTonic === "random") {
         staff.setKeySignature(null);
         feedbackText.textContent = "Random Key active — click 'New Interval' to draw a key.";
@@ -124,6 +151,7 @@ const controls = new ControlsPanel(
       }
     },
     onNewExercise: (opts) => {
+      clearPlaybackTimers();
       lastOptions = opts;
       currentExercise = generator.createExercise({
         allowedIntervals: opts.allowedIntervals,
@@ -182,6 +210,7 @@ function resetQuizButtons() {
 
 function revealAnswer() {
   if (!currentExercise) return;
+  clearPlaybackTimers();
   const keyTag = currentExercise.activeKeyTonic
     ? ` [${currentExercise.activeKeyLabel}]`
     : "";
