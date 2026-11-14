@@ -1,5 +1,7 @@
 // theory/IntervalGenerator.js
-// Generates intervals using explicit scale formulas, multi-interval filtering, and safe VexFlow key signatures
+// Generates tonic-anchored intervals in Major/Minor keys (specific or random):
+// - Ascending / Harmonic: Tonic is the LOWER note (steps up to a scale degree)
+// - Descending: Tonic is the HIGHER note (steps down to a scale degree)
 
 export const INTERVALS = [
   { id: "m2", tonal: "2m", name: "Minor 2nd", semitones: 1 },
@@ -16,11 +18,6 @@ export const INTERVALS = [
   { id: "P8", tonal: "8P", name: "Octave", semitones: 12 },
 ];
 
-export const ROOT_POOL = [
-  "C3", "D3", "Eb3", "E3", "F3", "G3", "Ab3", "A3", "Bb3", "B3",
-  "C4", "D4", "Eb4", "E4", "F4", "G4", "A4", "Bb4", "B4", "C5"
-];
-
 export const KEY_TONICS = [
   "C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"
 ];
@@ -30,18 +27,25 @@ export const SCALE_TYPES = [
     id: "major",
     label: "Major",
     isMinor: false,
-    useKeySig: true,
     intervals: ["1P", "2M", "3M", "4P", "5P", "6M", "7M"],
+    // Intervals formed going UP from the tonic
+    ascendingIntervalIds: ["M2", "M3", "P4", "P5", "M6", "M7", "P8"],
+    // Intervals formed going DOWN from the tonic (inversions of scale degrees)
+    descendingIntervalIds: ["m2", "m3", "P4", "P5", "m6", "m7", "P8"],
   },
   {
     id: "minor",
     label: "Minor",
     isMinor: true,
-    useKeySig: true,
     intervals: ["1P", "2M", "3m", "4P", "5P", "6m", "7m"],
+    // Intervals formed going UP from the tonic in Natural Minor
+    ascendingIntervalIds: ["M2", "m3", "P4", "P5", "m6", "m7", "P8"],
+    // Intervals formed going DOWN from the tonic in Natural Minor
+    descendingIntervalIds: ["M2", "M3", "P4", "P5", "M6", "m7", "P8"],
   },
 ];
 
+// Normalize enharmonic tonics so VexFlow always renders standard key signatures
 const MINOR_TONIC_MAP = {
   Db: "C#",
   Gb: "F#",
@@ -53,164 +57,132 @@ const MAJOR_TONIC_MAP = {
 };
 
 export class IntervalGenerator {
-  _resolveTonic(keyTonic, isMinor) {
-    if (isMinor) return MINOR_TONIC_MAP[keyTonic] || keyTonic;
+  _resolveTonic(keyTonic, scaleType) {
+    if (scaleType === "minor") {
+      return MINOR_TONIC_MAP[keyTonic] || keyTonic;
+    }
     return MAJOR_TONIC_MAP[keyTonic] || keyTonic;
   }
 
-  getVexKeySignature(keyTonic, scaleType) {
-    if (!keyTonic || keyTonic === "none") return null;
-    const scaleMeta = SCALE_TYPES.find((s) => s.id === scaleType) || SCALE_TYPES[0];
-    if (!scaleMeta.useKeySig) return null;
-
-    const cleanTonic = this._resolveTonic(keyTonic, scaleMeta.isMinor);
-    return scaleMeta.isMinor ? `${cleanTonic}m` : cleanTonic;
+  /**
+   * Returns the VexFlow key signature string (e.g., "Eb", "Bb", "C#m", "Am")
+   */
+  getVexKeySignature(keyTonic, scaleType = "major") {
+    if (!keyTonic || keyTonic === "random") return null;
+    const normalized = this._resolveTonic(keyTonic, scaleType);
+    return scaleType === "minor" ? `${normalized}m` : normalized;
   }
 
-  _getScaleNotesInRange(keyTonic, scaleType) {
-    const scaleMeta = SCALE_TYPES.find((s) => s.id === scaleType) || SCALE_TYPES[0];
-    const cleanTonic = this._resolveTonic(keyTonic, scaleMeta.isMinor);
-    const concreteNotes = [];
-
-    for (const octave of [3, 4, 5]) {
-      const octaveRoot = `${cleanTonic}${octave}`;
-      for (const ivl of scaleMeta.intervals) {
-        const note = Tonal.Note.transpose(octaveRoot, ivl);
-        const midi = Tonal.Note.midi(note);
-        if (midi >= 48 && midi <= 72) {
-          concreteNotes.push(note);
-        }
-      }
-    }
-
-    return concreteNotes.sort((a, b) => Tonal.Note.midi(a) - Tonal.Note.midi(b));
+  /**
+   * Returns human-readable key name (e.g., "Eb Major", "C# Minor")
+   */
+  getKeyDisplayName(keyTonic, scaleType = "major") {
+    if (!keyTonic || keyTonic === "random") return "Random Key";
+    const normalized = this._resolveTonic(keyTonic, scaleType);
+    const scaleLabel = scaleType === "minor" ? "Minor" : "Major";
+    return `${normalized} ${scaleLabel}`;
   }
 
-  getContextSequence(exercise) {
-    const sortedInterval = [...exercise.notes].sort(
-      (a, b) => Tonal.Note.midi(a) - Tonal.Note.midi(b)
-    );
+  /**
+   * Builds a two-note exercise anchored on the tonic of the chosen key:
+   * - Ascending / Harmonic: Tonic is the LOWER note ([Tonic, UpperScaleNote])
+   * - Descending: Tonic is the HIGHER note ([Tonic, LowerScaleNote])
+   */
+  createExercise({
+    allowedIntervals = null,
+    direction = "ascending",
+    keyTonic = "C",
+    scaleType = "major",
+  } = {}) {
+    const activeIds =
+      allowedIntervals && allowedIntervals.length > 0
+        ? allowedIntervals
+        : INTERVALS.map((i) => i.id);
 
-    const hasKey = exercise.keyTonic && exercise.keyTonic !== "none";
-    const scaleMeta = SCALE_TYPES.find((s) => s.id === exercise.scaleType) || SCALE_TYPES[0];
-    const isMinor = hasKey ? scaleMeta.isMinor : false;
+    const resolvedKeyTonic =
+      keyTonic === "random"
+        ? KEY_TONICS[Math.floor(Math.random() * KEY_TONICS.length)]
+        : keyTonic;
 
-    const rawTonic = hasKey ? exercise.keyTonic : Tonal.Note.pitchClass(sortedInterval[0]);
-    const cleanTonic = this._resolveTonic(rawTonic, isMinor);
-    const baseOctave = Tonal.Note.octave(sortedInterval[0]) <= 3 ? 3 : 4;
-    const tonicRoot = `${cleanTonic}${baseOctave}`;
+    const resolvedScaleType = scaleType || "major";
+    const normalizedTonic = this._resolveTonic(resolvedKeyTonic, resolvedScaleType);
+    const scaleDef =
+      SCALE_TYPES.find((s) => s.id === resolvedScaleType) || SCALE_TYPES[0];
 
-    const thirdInterval = isMinor ? "3m" : "3M";
-    const tonicChord = [
-      tonicRoot,
-      Tonal.Note.transpose(tonicRoot, thirdInterval),
-      Tonal.Note.transpose(tonicRoot, "5P"),
-    ];
+    const keySignature = this.getVexKeySignature(normalizedTonic, resolvedScaleType);
+    const activeKeyLabel = this.getKeyDisplayName(normalizedTonic, resolvedScaleType);
 
-    const activeIntervals = hasKey ? scaleMeta.intervals : SCALE_TYPES[0].intervals;
-    const ascendingScale = activeIntervals.map((ivl) =>
-      Tonal.Note.transpose(tonicRoot, ivl)
-    );
-    ascendingScale.push(Tonal.Note.transpose(tonicRoot, "8P"));
+    const isDescending = direction === "descending";
+    const diatonicIds = isDescending
+      ? scaleDef.descendingIntervalIds
+      : scaleDef.ascendingIntervalIds;
+
+    // Intersect user's selected interval pills with the valid diatonic intervals from the tonic
+    const scaleIntervalObjs = INTERVALS.filter((i) => diatonicIds.includes(i.id));
+    const intersected = scaleIntervalObjs.filter((i) => activeIds.includes(i.id));
+    const candidateIntervals =
+      intersected.length > 0 ? intersected : scaleIntervalObjs;
+
+    const interval =
+      candidateIntervals[Math.floor(Math.random() * candidateIntervals.length)];
+
+    // Place the tonic in octave 4 when descending (so stepping down lands cleanly in octave 3/4),
+    // and in octave 3 or 4 when ascending/harmonic
+    const tonicOctave = isDescending
+      ? "4"
+      : Math.random() < 0.5
+      ? "3"
+      : "4";
+    const tonicNote = `${normalizedTonic}${tonicOctave}`;
+
+    const secondNote = isDescending
+      ? Tonal.Note.transpose(tonicNote, `-${interval.tonal}`)
+      : Tonal.Note.transpose(tonicNote, interval.tonal);
 
     return {
-      tonicChord,
-      ascendingScale,
-      sortedInterval,
+      interval,
+      direction,
+      notes: [tonicNote, secondNote],
+      playbackMode: direction === "harmonic" ? "harmonic" : "melodic",
+      keySignature,
+      activeKeyTonic: normalizedTonic,
+      activeScaleType: resolvedScaleType,
+      activeKeyLabel,
     };
   }
 
-  createExercise({
-    allowedIntervals = INTERVALS.map((i) => i.id),
-    direction = "ascending",
-    rootNote = "random",
-    keyTonic = "none",
-    scaleType = "major",
-  } = {}) {
-    // Ensure at least one interval is active
-    const activePool =
-      Array.isArray(allowedIntervals) && allowedIntervals.length > 0
-        ? INTERVALS.filter((i) => allowedIntervals.includes(i.id))
-        : INTERVALS;
+  /**
+   * Builds the post-answer context sequence:
+   * 1. Tonic Triad (1 - 3 - 5)
+   * 2. 1-Octave Ascending Scale from the tonic
+   * 3. Target Interval sorted Lower -> Higher
+   */
+  getContextSequence(exercise) {
+    const sortedIntervalNotes = [...exercise.notes].sort(
+      (a, b) => Tonal.Note.midi(a) - Tonal.Note.midi(b)
+    );
+    const tonicNote = exercise.notes[0];
 
-    // --- MODE A: Chromatic (Any Key) ---
-    if (!keyTonic || keyTonic === "none") {
-      const interval = activePool[Math.floor(Math.random() * activePool.length)];
-      const safeRandomPool = ROOT_POOL.slice(0, 16);
-      const startNote =
-        rootNote === "random"
-          ? safeRandomPool[Math.floor(Math.random() * safeRandomPool.length)]
-          : rootNote;
+    const isMinor = exercise.activeScaleType === "minor";
+    const scaleDef =
+      SCALE_TYPES.find((s) => s.id === (exercise.activeScaleType || "major")) ||
+      SCALE_TYPES[0];
 
-      const targetNote =
-        direction === "descending"
-          ? Tonal.Note.transpose(startNote, `-${interval.tonal}`)
-          : Tonal.Note.transpose(startNote, interval.tonal);
+    const triad = [
+      tonicNote,
+      Tonal.Note.transpose(tonicNote, isMinor ? "3m" : "3M"),
+      Tonal.Note.transpose(tonicNote, "5P"),
+    ];
 
-      return {
-        interval,
-        direction,
-        notes: [startNote, targetNote],
-        playbackMode: direction === "harmonic" ? "harmonic" : "melodic",
-        keySignature: null,
-        keyTonic: "none",
-        scaleType,
-      };
-    }
-
-    // --- MODE B: Diatonic Scale Pairs ---
-    const scaleNotes = this._getScaleNotesInRange(keyTonic, scaleType);
-    const allowedIds = new Set(activePool.map((i) => i.id));
-    const validPairs = [];
-
-    for (let i = 0; i < scaleNotes.length; i++) {
-      for (let j = 0; j < scaleNotes.length; j++) {
-        if (i === j) continue;
-        const n1 = scaleNotes[i];
-        const n2 = scaleNotes[j];
-        const diff = Tonal.Note.midi(n2) - Tonal.Note.midi(n1);
-
-        if (Math.abs(diff) < 1 || Math.abs(diff) > 12) continue;
-        if (direction === "descending" && diff >= 0) continue;
-        if ((direction === "ascending" || direction === "harmonic") && diff <= 0) continue;
-        if (rootNote !== "random" && Tonal.Note.midi(n1) !== Tonal.Note.midi(rootNote)) continue;
-
-        const semitones = Math.abs(diff);
-        const matchedInterval = INTERVALS.find((int) => int.semitones === semitones);
-        if (!matchedInterval || !allowedIds.has(matchedInterval.id)) continue;
-
-        validPairs.push({
-          interval: matchedInterval,
-          notes: [n1, n2],
-        });
-      }
-    }
-
-    // If strict anchor note has no matches for selected intervals, relax anchor once
-    if (validPairs.length === 0 && rootNote !== "random") {
-      return this.createExercise({
-        allowedIntervals,
-        direction,
-        rootNote: "random",
-        keyTonic,
-        scaleType,
-      });
-    }
-
-    const chosen =
-      validPairs[Math.floor(Math.random() * validPairs.length)] || {
-        interval: INTERVALS[6],
-        notes: [scaleNotes[0], scaleNotes[4] || scaleNotes[1]],
-      };
+    const ascendingScale = [
+      ...scaleDef.intervals.map((iv) => Tonal.Note.transpose(tonicNote, iv)),
+      Tonal.Note.transpose(tonicNote, "8P"),
+    ];
 
     return {
-      interval: chosen.interval,
-      direction,
-      notes: chosen.notes,
-      playbackMode: direction === "harmonic" ? "harmonic" : "melodic",
-      keySignature: this.getVexKeySignature(keyTonic, scaleType),
-      keyTonic,
-      scaleType,
+      triad,
+      ascendingScale,
+      intervalAscending: sortedIntervalNotes,
     };
   }
 }
