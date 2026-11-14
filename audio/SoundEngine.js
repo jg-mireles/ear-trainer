@@ -21,14 +21,23 @@ export class SoundEngine {
     this.tuning.setSystem(tuningId);
   }
 
+  playNote(note, duration = 1.0) {
+    if (!note) return;
+    if (this.mode === "easy") {
+      this.piano.playNote(note, duration);
+    } else {
+      const [freq] = this.tuning.getFrequencies([note]);
+      this.synth.playFreq(freq, duration);
+    }
+  }
+
   playChord(notes, { duration = 1.2, mode = "harmonic", stagger = 0.4, allowShort = false } = {}) {
     if (!notes || notes.length === 0) return;
 
     if (this.mode === "easy") {
       this.piano.playChord(notes, { duration, mode, stagger });
     } else {
-      const rootNote = notes[0];
-      const freqs = notes.map((note) => this.tuning.getFrequency(note, rootNote));
+      const freqs = this.tuning.getFrequencies(notes);
       this.synth.playChord(freqs, { duration, mode, stagger, allowShort });
     }
   }
