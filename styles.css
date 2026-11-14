@@ -202,3 +202,132 @@ select, button {
 }
 
 #feedback-text { font-weight: 600; min-height: 1.5em; margin: 10px 0 0; }
+
+/* --- Cross-Device Fluid Staff & Touch Polish --- */
+.staff-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.staff-wrapper svg {
+  max-width: 100%;
+  height: auto;
+}
+
+button,
+select {
+  min-height: 40px;
+}
+
+/* --- Collapsible Harmony Context Drawer --- */
+.harmony-drawer {
+  margin-top: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.harmony-toggle-btn {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.harmony-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.harmony-toggle-btn small {
+  opacity: 0.75;
+  font-weight: 400;
+}
+
+.harmony-drawer-body {
+  padding: 12px 14px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.harmony-hint {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.harmony-chord-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.harmony-chord-chip {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.harmony-chord-chip.active {
+  border-color: #60a5fa;
+  background: rgba(96, 165, 250, 0.2);
+}
+
+.harmony-role-banner {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(96, 165, 250, 0.12);
+  font-size: 0.88rem;
+  margin-bottom: 10px;
+}
+
+.harmony-prog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.harmony-prog-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.harmony-prog-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.harmony-prog-roman {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.harmony-prog-chords {
+  font-size: 0.92rem;
+}
+
+.harmony-play-prog {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
