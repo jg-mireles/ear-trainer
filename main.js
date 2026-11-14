@@ -1,41 +1,241 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Harmonic Ear Trainer</title>
-  <link rel="stylesheet" href="styles.css?v=28" />
-  <!-- External Audio, Music Theory, and Notation Libraries -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/tonal/browser/tonal.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
-</head>
-<body>
-  <div class="app-shell">
-    <header>
-      <h1>Harmonic Ear Trainer</h1>
-      <span id="status-badge">Loading piano samples...</span>
-    </header>
+// main.js
+// Orchestrates Audio, Theory, Notation, and UI modules
 
-    <!-- Controls & Harmonic Synth Lab injected by ControlsPanel.js -->
-    <div id="controls-container"></div>
+import { SoundEngine } from "./audio/SoundEngine.js?v=28";
+import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=28";
+import { StaffRenderer } from "./notation/StaffRenderer.js?v=28";
+import { ControlsPanel } from "./ui/ControlsPanel.js?v=28";
 
-    <!-- Ear Training Answer Deck & Notation Reveal -->
-    <section class="panel-card">
-      <div class="section-header">
-        <h2>3. Identify the Interval</h2>
-      </div>
-      <div id="quiz-grid" class="quiz-grid"></div>
-      <p id="feedback-text">Selected Key: C Major (Tonic = C) — click "New Interval" to begin.</p>
-      <div style="margin-top: 10px;">
-        <button type="button" id="btn-context" class="primary-btn hidden">
-          Hear in Context (Tonic Triad → Scale → Interval ↑)
-        </button>
-      </div>
-      <div id="staff-container" class="staff-wrapper"></div>
-    </section>
-  </div>
+const statusBadge = document.getElementById("status-badge");
+const feedbackText = document.getElementById("feedback-text");
+const quizGrid = document.getElementById("quiz-grid");
+const contextBtn = document.getElementById("btn-context");
 
-  <script type="module" src="main.js?v=28"></script>
-</body>
-</html>
+// 1. Initialize Core Modules
+const engine = new SoundEngine(() => {
+  statusBadge.textContent = "Piano Samples Ready";
+});
+const generator = new IntervalGenerator();
+const staff = new StaffRenderer("staff-container");
+
+// Draw initial Piano Grand Staff with C Major right away
+staff.renderEmptyStaff(generator.getVexKeySignature("C", "major"));
+
+let currentExercise = null;
+let lastOptions = null;
+let playbackTimers = [];
+
+function clearPlaybackTimers() {
+  playbackTimers.forEach((id) => clearTimeout(id));
+  playbackTimers = [];
+}
+
+function playMetronomeClick(time) {
+  const ctx = Tone.context.rawContext;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.frequency.value = 1000;
+  gain.gain.setValueAtTime(0.15, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.04);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(time);
+  osc.stop(time + 0.05);
+}
+
+async function playCurrentExercise(opts) {
+  if (!currentExercise) return;
+  clearPlaybackTimers();
+  await Tone.start();
+  if (engine.synth?.ctx?.state === "suspended") {
+    await engine.synth.ctx.resume();
+  }
+  engine.setMode(opts.soundMode);
+  engine.setTuning(opts.tuning);
+
+  const stagger = opts.stagger;
+  const delayBeforeNotes = opts.metronomeClick ? stagger * 2 : 0;
+
+  if (opts.metronomeClick) {
+    const now = Tone.context.rawContext.currentTime;
+    playMetronomeClick(now);
+    playMetronomeClick(now + stagger);
+  }
+
+  const timerId = setTimeout(() => {
+    engine.playChord(currentExercise.notes, {
+      mode: currentExercise.playbackMode,
+      stagger,
+      duration: Math.max(1.1, stagger * 1.2),
+    });
+  }, delayBeforeNotes * 1000);
+
+  playbackTimers.push(timerId);
+}
+
+// Plays and draws in sync:
+// 1) Tonic Triad -> 2) 1-Octave Ascending Scale -> 3) Exercise Interval (Low -> High)
+async function playContextSequence() {
+  if (!currentExercise) return;
+  clearPlaybackTimers();
+  await Tone.start();
+  if (engine.synth?.ctx?.state === "suspended") {
+    await engine.synth.ctx.resume();
+  }
+
+  engine.setMode(controls.state.soundMode);
+  engine.setTuning(controls.state.tuning);
+
+  const stagger = controls.getStaggerSeconds();
+  const seq = generator.getContextSequence(currentExercise);
+  const keySig = currentExercise.keySignature;
+
+  const chordDuration = stagger * 2;
+  const scaleStepSec = Math.max(0.24, stagger * 0.5);
+  const scaleTotalSec = seq.ascendingScale.length * scaleStepSec;
+  const pauseAfterChord = 0.25;
+  const pauseAfterScale = 0.35;
+
+  // 1. Tonic Triad (Audio + Grand Staff)
+  feedbackText.textContent = `Context 1/3 — Tonic Triad (${seq.triad.join(" - ")})`;
+  staff.renderNotes(seq.triad, "harmonic", keySig);
+  engine.playChord(seq.triad, {
+    mode: "harmonic",
+    duration: chordDuration,
+  });
+
+  // 2. 1-Octave Ascending Scale (Audio + Grand Staff)
+  const scaleTimer = setTimeout(() => {
+    feedbackText.textContent = `Context 2/3 — Ascending Scale (${seq.ascendingScale.join(" → ")})`;
+    staff.renderNotes(seq.ascendingScale, "melodic", keySig);
+    engine.playChord(seq.ascendingScale, {
+      mode: "melodic",
+      stagger: scaleStepSec,
+      duration: scaleStepSec * 0.9,
+      allowShort: true,
+    });
+  }, (chordDuration + pauseAfterChord) * 1000);
+  playbackTimers.push(scaleTimer);
+
+  // 3. Target Exercise Interval Lower -> Higher (Audio + Grand Staff)
+  const intervalTimer = setTimeout(() => {
+    feedbackText.textContent = `Context 3/3 — Target Interval: ${currentExercise.interval.name} (${seq.intervalAscending.join(" → ")}) [${currentExercise.activeKeyLabel}]`;
+    staff.renderNotes(seq.intervalAscending, "melodic", keySig);
+    engine.playChord(seq.intervalAscending, {
+      mode: "melodic",
+      stagger,
+      duration: Math.max(1.1, stagger * 1.2),
+    });
+  }, (chordDuration + pauseAfterChord + scaleTotalSec + pauseAfterScale) * 1000);
+  playbackTimers.push(intervalTimer);
+}
+
+// 2. Initialize Controls Panel
+const controls = new ControlsPanel(
+  document.getElementById("controls-container"),
+  engine.synth,
+  {
+    onKeyChange: (keyTonic, scaleType) => {
+      clearPlaybackTimers();
+      if (keyTonic === "random") {
+        staff.setKeySignature(null);
+        feedbackText.textContent = "Random Key active — click 'New Interval' to draw a key.";
+      } else {
+        const vexSig = generator.getVexKeySignature(keyTonic, scaleType);
+        staff.setKeySignature(vexSig);
+        const label = generator.getKeyDisplayName(keyTonic, scaleType);
+        feedbackText.textContent = `Selected Key: ${label} (Tonic = ${keyTonic}) — click 'New Interval' to start.`;
+      }
+    },
+    onNewExercise: (opts) => {
+      clearPlaybackTimers();
+      lastOptions = opts;
+      currentExercise = generator.createExercise({
+        allowedIntervals: opts.allowedIntervals,
+        direction: opts.direction,
+        keyTonic: opts.keyTonic,
+        scaleType: opts.scaleType,
+      });
+
+      // Immediately draw the active key signature (sharps/flats) on the Piano Grand Staff
+      staff.renderEmptyStaff(currentExercise.keySignature);
+      contextBtn.classList.add("hidden");
+
+      const roleLabel =
+        opts.direction === "descending" ? "Higher Note" : "Lower Note";
+      feedbackText.textContent = `Key: ${currentExercise.activeKeyLabel} (Tonic ${currentExercise.activeKeyTonic} = ${roleLabel}) — Listen and identify...`;
+
+      resetQuizButtons();
+      playCurrentExercise(opts);
+    },
+    onRepeat: (opts) => {
+      if (!currentExercise) return;
+      lastOptions = opts;
+      playCurrentExercise(opts);
+    },
+    onReveal: () => {
+      if (!currentExercise) return;
+      revealAnswer();
+    },
+    onModeChange: (mode) => {
+      engine.setMode(mode);
+    },
+    onTuningChange: (tuningId) => {
+      engine.setTuning(tuningId);
+    },
+  }
+);
+
+// 3. Build Interval Answer Buttons
+function buildQuizButtons() {
+  quizGrid.innerHTML = INTERVALS.map(
+    (int) => `<button type="button" class="quiz-btn" data-id="${int.id}">${int.name}</button>`
+  ).join("");
+
+  quizGrid.querySelectorAll(".quiz-btn").forEach((btn) => {
+    btn.addEventListener("click", () => handleGuess(btn));
+  });
+}
+
+function resetQuizButtons() {
+  quizGrid.querySelectorAll(".quiz-btn").forEach((btn) => {
+    btn.classList.remove("correct", "wrong");
+  });
+}
+
+function revealAnswer() {
+  if (!currentExercise) return;
+  clearPlaybackTimers();
+  feedbackText.textContent = `Answer: ${currentExercise.interval.name} (${currentExercise.notes.join(" → ")}) [${currentExercise.activeKeyLabel}]`;
+
+  staff.renderNotes(
+    currentExercise.notes,
+    currentExercise.playbackMode,
+    currentExercise.keySignature
+  );
+
+  contextBtn.classList.remove("hidden");
+
+  const correctBtn = quizGrid.querySelector(`.quiz-btn[data-id="${currentExercise.interval.id}"]`);
+  if (correctBtn) correctBtn.classList.add("correct");
+}
+
+function handleGuess(btn) {
+  if (!currentExercise) {
+    feedbackText.textContent = "Click 'New Interval' first to start!";
+    return;
+  }
+
+  const guessedId = btn.dataset.id;
+  if (guessedId === currentExercise.interval.id) {
+    btn.classList.add("correct");
+    revealAnswer();
+  } else {
+    btn.classList.add("wrong");
+    feedbackText.textContent = `Not quite (${btn.textContent}) [Active Key: ${currentExercise.activeKeyLabel}]. Try again or click Reveal on Staff.`;
+  }
+}
+
+contextBtn.addEventListener("click", playContextSequence);
+
+buildQuizButtons();
