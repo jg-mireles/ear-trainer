@@ -1,7 +1,7 @@
 // ui/ControlsPanel.js
-// Manages Training Controls, Key/Scale Selection, Multi-Interval Toggle Deck, Fixed/Random Root, BPM, and Harmonic Rack
+// Manages Training Controls, Key/Scale Selection (Specific, Random, or Chromatic), Multi-Interval Pills, and Synth Lab
 
-import { INTERVALS, ROOT_POOL, KEY_TONICS, SCALE_TYPES } from "../theory/IntervalGenerator.js?v=19";
+import { INTERVALS, ROOT_POOL, KEY_TONICS, SCALE_TYPES } from "../theory/IntervalGenerator.js?v=22";
 
 const SYNTH_PRESETS = {
   warm: {
@@ -49,7 +49,7 @@ export class ControlsPanel {
     };
 
     this.state = {
-      keyTonic: "none",
+      keyTonic: "C",
       scaleType: "major",
       allowedIntervals: new Set(INTERVALS.map((i) => i.id)),
       rootNote: "random",
@@ -80,8 +80,11 @@ export class ControlsPanel {
 
   _render() {
     const keyOptions = [
+      `<option value="random">Random Key (Bottom = Tonic)</option>`,
+      ...KEY_TONICS.map(
+        (k) => `<option value="${k}" ${k === "C" ? "selected" : ""}>Key of ${k} (Bottom = ${k})</option>`
+      ),
       `<option value="none">Any Key (Chromatic)</option>`,
-      ...KEY_TONICS.map((k) => `<option value="${k}">Key of ${k}</option>`),
     ].join("");
 
     const scaleOptions = SCALE_TYPES.map(
@@ -96,7 +99,7 @@ export class ControlsPanel {
     ).join("");
 
     const rootOptions = [
-      `<option value="random">Random (Truly Random)</option>`,
+      `<option value="random">Random Note</option>`,
       ...ROOT_POOL.map(
         (note) => `<option value="${note}">Fixed: ${note}</option>`
       ),
@@ -125,24 +128,24 @@ export class ControlsPanel {
 
         <div class="controls-grid">
           <label>
-            <span>Key / Scale Constraint</span>
+            <span>Key / Tonality (Bottom Note = Tonic)</span>
             <div style="display: flex; gap: 6px;">
-              <select id="key-select" style="flex: 1;">${keyOptions}</select>
-              <select id="scale-select" style="flex: 1.2;" disabled>${scaleOptions}</select>
+              <select id="key-select" style="flex: 1.3;">${keyOptions}</select>
+              <select id="scale-select" style="flex: 0.9;">${scaleOptions}</select>
             </div>
           </label>
 
           <label>
-            <span>First Note (Anchor)</span>
-            <select id="root-select">${rootOptions}</select>
+            <span>Chromatic Start Note (Any Key Only)</span>
+            <select id="root-select" disabled>${rootOptions}</select>
           </label>
 
           <label>
             <span>Playback Order</span>
             <select id="direction-select">
               <option value="harmonic">Same Time (Harmonic)</option>
-              <option value="ascending" selected>Lower → Higher</option>
-              <option value="descending">Higher → Lower</option>
+              <option value="ascending" selected>Lower → Higher (Tonic → Upper)</option>
+              <option value="descending">Higher → Lower (Upper → Tonic)</option>
             </select>
           </label>
 
@@ -232,6 +235,10 @@ export class ControlsPanel {
     q("#mode-hard").addEventListener("click", () => this._setSoundMode("hard"));
 
     const notifyKeyChange = () => {
+      const isChromatic = this.state.keyTonic === "none";
+      q("#scale-select").disabled = isChromatic;
+      q("#root-select").disabled = !isChromatic;
+
       if (this.callbacks.onKeyChange) {
         this.callbacks.onKeyChange(this.state.keyTonic, this.state.scaleType);
       }
@@ -239,7 +246,6 @@ export class ControlsPanel {
 
     q("#key-select").addEventListener("change", (e) => {
       this.state.keyTonic = e.target.value;
-      q("#scale-select").disabled = this.state.keyTonic === "none";
       notifyKeyChange();
     });
 
@@ -252,7 +258,6 @@ export class ControlsPanel {
       this.state.rootNote = e.target.value;
     });
 
-    // Multi-select interval chip toggles
     this.container.querySelectorAll(".interval-chip").forEach((chip) => {
       chip.addEventListener("click", () => {
         const id = chip.dataset.id;
@@ -289,7 +294,6 @@ export class ControlsPanel {
     });
 
     q("#btn-new").addEventListener("click", () => {
-      // Auto-reselect all if user cleared everything before hitting New Interval
       if (this.state.allowedIntervals.size === 0) {
         this.state.allowedIntervals = new Set(INTERVALS.map((i) => i.id));
         this._syncIntervalChipsUI();
