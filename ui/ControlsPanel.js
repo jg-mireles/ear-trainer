@@ -1,7 +1,7 @@
 // ui/ControlsPanel.js
 // Manages Training Controls, Key/Scale Selection, Multi-Interval Toggle Deck, Fixed/Random Root, BPM, and Harmonic Rack
 
-import { INTERVALS, ROOT_POOL, KEY_TONICS, SCALE_TYPES } from "../theory/IntervalGenerator.js?v=18";
+import { INTERVALS, ROOT_POOL, KEY_TONICS, SCALE_TYPES } from "../theory/IntervalGenerator.js?v=19";
 
 const SYNTH_PRESETS = {
   warm: {
