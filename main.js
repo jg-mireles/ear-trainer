@@ -1,10 +1,10 @@
 // main.js
 // Orchestrates Audio, Theory, Notation, and UI modules
 
-import { SoundEngine } from "./audio/SoundEngine.js?v=24";
-import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=24";
-import { StaffRenderer } from "./notation/StaffRenderer.js?v=24";
-import { ControlsPanel } from "./ui/ControlsPanel.js?v=24";
+import { SoundEngine } from "./audio/SoundEngine.js?v=25";
+import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=25";
+import { StaffRenderer } from "./notation/StaffRenderer.js?v=25";
+import { ControlsPanel } from "./ui/ControlsPanel.js?v=25";
 
 const statusBadge = document.getElementById("status-badge");
 const feedbackText = document.getElementById("feedback-text");
