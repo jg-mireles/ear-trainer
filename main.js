@@ -1,15 +1,17 @@
 // main.js
 // Orchestrates Audio, Theory, Notation, and UI modules
 
-import { SoundEngine } from "./audio/SoundEngine.js?v=28";
-import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=28";
-import { StaffRenderer } from "./notation/StaffRenderer.js?v=28";
-import { ControlsPanel } from "./ui/ControlsPanel.js?v=28";
+import { SoundEngine } from "./audio/SoundEngine.js?v=29";
+import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=29";
+import { StaffRenderer } from "./notation/StaffRenderer.js?v=29";
+import { ControlsPanel } from "./ui/ControlsPanel.js?v=29";
+import { HarmonyContextDrawer } from "./ui/HarmonyContextDrawer.js?v=29";
 
 const statusBadge = document.getElementById("status-badge");
 const feedbackText = document.getElementById("feedback-text");
 const quizGrid = document.getElementById("quiz-grid");
 const contextBtn = document.getElementById("btn-context");
+const harmonyContainer = document.getElementById("harmony-context-container");
 
 // 1. Initialize Core Modules
 const engine = new SoundEngine(() => {
@@ -43,15 +45,21 @@ function playMetronomeClick(time) {
   osc.stop(time + 0.05);
 }
 
-async function playCurrentExercise(opts) {
-  if (!currentExercise) return;
-  clearPlaybackTimers();
+async function ensureAudioReady() {
   await Tone.start();
   if (engine.synth?.ctx?.state === "suspended") {
     await engine.synth.ctx.resume();
   }
-  engine.setMode(opts.soundMode);
-  engine.setTuning(opts.tuning);
+  if (controls) {
+    engine.setMode(controls.state.soundMode);
+    engine.setTuning(controls.state.tuning);
+  }
+}
+
+async function playCurrentExercise(opts) {
+  if (!currentExercise) return;
+  clearPlaybackTimers();
+  await ensureAudioReady();
 
   const stagger = opts.stagger;
   const delayBeforeNotes = opts.metronomeClick ? stagger * 2 : 0;
@@ -78,13 +86,7 @@ async function playCurrentExercise(opts) {
 async function playContextSequence() {
   if (!currentExercise) return;
   clearPlaybackTimers();
-  await Tone.start();
-  if (engine.synth?.ctx?.state === "suspended") {
-    await engine.synth.ctx.resume();
-  }
-
-  engine.setMode(controls.state.soundMode);
-  engine.setTuning(controls.state.tuning);
+  await ensureAudioReady();
 
   const stagger = controls.getStaggerSeconds();
   const seq = generator.getContextSequence(currentExercise);
@@ -130,13 +132,53 @@ async function playContextSequence() {
   playbackTimers.push(intervalTimer);
 }
 
-// 2. Initialize Controls Panel
+// 2. Initialize Collapsible Harmony Context Drawer
+const harmonyDrawer = new HarmonyContextDrawer(harmonyContainer, {
+  onPlayChord: async (chordObj) => {
+    if (!currentExercise || !chordObj) return;
+    clearPlaybackTimers();
+    await ensureAudioReady();
+
+    const beat = controls.getStaggerSeconds();
+    feedbackText.textContent = `Chord Context — ${chordObj.symbol} (${chordObj.roman}): ${chordObj.roleDesc}`;
+    staff.renderNotes(chordObj.notes, "harmonic", currentExercise.keySignature);
+    engine.playChord(chordObj.notes, {
+      mode: "harmonic",
+      duration: Math.max(1.4, beat * 2),
+    });
+  },
+  onPlayProgression: async (prog) => {
+    if (!currentExercise || !prog) return;
+    clearPlaybackTimers();
+    await ensureAudioReady();
+
+    const stepSec = Math.max(0.75, controls.getStaggerSeconds() * 1.4);
+    const keySig = currentExercise.keySignature;
+
+    prog.steps.forEach((step, idx) => {
+      const timerId = setTimeout(() => {
+        const star = step.isTarget ? " ★ (Contains your interval)" : "";
+        feedbackText.textContent = `Progression (${prog.label}) — ${step.symbol} (${step.roman})${star}`;
+        staff.renderNotes(step.notes, "harmonic", keySig);
+        engine.playChord(step.notes, {
+          mode: "harmonic",
+          duration: stepSec * 0.92,
+        });
+      }, idx * stepSec * 1000);
+
+      playbackTimers.push(timerId);
+    });
+  },
+});
+
+// 3. Initialize Controls Panel
 const controls = new ControlsPanel(
   document.getElementById("controls-container"),
   engine.synth,
   {
     onKeyChange: (keyTonic, scaleType) => {
       clearPlaybackTimers();
+      harmonyDrawer.reset();
       if (keyTonic === "random") {
         staff.setKeySignature(null);
         feedbackText.textContent = "Random Key active — click 'New Interval' to draw a key.";
@@ -149,6 +191,7 @@ const controls = new ControlsPanel(
     },
     onNewExercise: (opts) => {
       clearPlaybackTimers();
+      harmonyDrawer.reset();
       lastOptions = opts;
       currentExercise = generator.createExercise({
         allowedIntervals: opts.allowedIntervals,
@@ -186,7 +229,7 @@ const controls = new ControlsPanel(
   }
 );
 
-// 3. Build Interval Answer Buttons
+// 4. Build Interval Answer Buttons
 function buildQuizButtons() {
   quizGrid.innerHTML = INTERVALS.map(
     (int) => `<button type="button" class="quiz-btn" data-id="${int.id}">${int.name}</button>`
@@ -215,6 +258,7 @@ function revealAnswer() {
   );
 
   contextBtn.classList.remove("hidden");
+  harmonyDrawer.prepareForExercise(currentExercise);
 
   const correctBtn = quizGrid.querySelector(`.quiz-btn[data-id="${currentExercise.interval.id}"]`);
   if (correctBtn) correctBtn.classList.add("correct");
