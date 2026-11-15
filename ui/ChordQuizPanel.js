@@ -1,7 +1,7 @@
 // ui/ChordQuizPanel.js
-// Self-contained UI & answer deck for Single Chords & Inversions
+// Self-contained UI & answer deck for Single Chords & Inversions with resolution rule breakdown
 
-import { CHORD_TYPES, INVERSIONS } from "../theory/ChordQuizGenerator.js?v=25";
+import { CHORD_TYPES, INVERSIONS } from "../theory/ChordQuizGenerator.js?v=33";
 
 export class ChordQuizPanel {
   constructor(
@@ -22,8 +22,10 @@ export class ChordQuizPanel {
       allowedInversions: new Set([0]),
       playbackStyle: "harmonic",
       bpm: 90,
+      showRules: false,
     };
 
+    this.currentExercise = null;
     this._render();
     this._bindEvents();
   }
@@ -110,10 +112,19 @@ export class ChordQuizPanel {
         </div>
         <div id="chord-quiz-grid" class="quiz-grid">${answerButtons}</div>
         <p id="chord-feedback-text">Click "New Chord" to begin.</p>
+
         <div style="margin-top: 10px;">
           <button type="button" id="btn-resolve-chord" class="primary-btn hidden">
             Resolve Chord to Tonic
           </button>
+        </div>
+
+        <!-- Collapsible Resolution Voice-Leading Rules Drawer -->
+        <div id="chord-resolution-rules-wrap" class="hidden" style="margin-top: 12px;">
+          <button type="button" id="btn-toggle-chord-rules" class="harmony-rules-toggle">
+            ▸ Resolution Voice-Leading Breakdown (Rules Followed)
+          </button>
+          <div id="chord-resolution-rules-body" class="hidden"></div>
         </div>
       </section>
     `;
@@ -130,6 +141,47 @@ export class ChordQuizPanel {
     this.container.querySelectorAll(".inv-chip").forEach((chip) => {
       chip.classList.toggle("selected", this.state.allowedInversions.has(Number(chip.dataset.id)));
     });
+  }
+
+  _renderResolutionRules(exercise) {
+    const wrap = this.container.querySelector("#chord-resolution-rules-wrap");
+    const toggleBtn = this.container.querySelector("#btn-toggle-chord-rules");
+    const body = this.container.querySelector("#chord-resolution-rules-body");
+
+    if (!exercise || !exercise.resolution) {
+      wrap.classList.add("hidden");
+      return;
+    }
+
+    const res = exercise.resolution;
+    const orderedVoices = [...res.voiceExplanations].reverse(); // Top voice -> Bass
+    const rows = orderedVoices
+      .map(
+        (v) => `
+        <li>
+          <strong>${v.voice}:</strong> <code>${v.from} → ${v.to}</code>
+          <span>(${v.reason})</span>
+        </li>`
+      )
+      .join("");
+
+    const checks = res.ruleChecks.map((c) => `<span class="rule-badge">${c}</span>`).join(" ");
+
+    toggleBtn.textContent = `${this.state.showRules ? "▾" : "▸"} Resolution Voice-Leading Breakdown (Rules Followed)`;
+    body.classList.toggle("hidden", !this.state.showRules);
+    body.innerHTML = `
+      <div class="satb-breakdown-box">
+        <div class="satb-step-card">
+          <div class="satb-step-title">
+            Resolution: <strong>${exercise.slashSymbol} (${exercise.chordDef.label}) → ${res.label}</strong>
+          </div>
+          <ul class="satb-voice-list">${rows}</ul>
+          <div class="satb-checks">${checks}</div>
+        </div>
+      </div>
+    `;
+
+    wrap.classList.remove("hidden");
   }
 
   _bindEvents() {
@@ -196,7 +248,15 @@ export class ChordQuizPanel {
     });
 
     q("#btn-resolve-chord").addEventListener("click", () => {
+      // Automatically expand the rules breakdown when you resolve the chord
+      this.state.showRules = true;
+      if (this.currentExercise) this._renderResolutionRules(this.currentExercise);
       if (this.callbacks.onPlayResolution) this.callbacks.onPlayResolution();
+    });
+
+    q("#btn-toggle-chord-rules").addEventListener("click", () => {
+      this.state.showRules = !this.state.showRules;
+      if (this.currentExercise) this._renderResolutionRules(this.currentExercise);
     });
 
     this.container.querySelectorAll(".chord-ans-btn").forEach((btn) => {
@@ -207,14 +267,18 @@ export class ChordQuizPanel {
   }
 
   resetFeedback(text = "Listen and identify the chord quality...") {
+    this.currentExercise = null;
+    this.state.showRules = false;
     this.container.querySelectorAll(".chord-ans-btn").forEach((btn) => {
       btn.classList.remove("correct", "wrong");
     });
     this.container.querySelector("#chord-feedback-text").textContent = text;
     this.container.querySelector("#btn-resolve-chord").classList.add("hidden");
+    this.container.querySelector("#chord-resolution-rules-wrap").classList.add("hidden");
   }
 
   showReveal(exercise) {
+    this.currentExercise = exercise;
     this.container.querySelector("#chord-feedback-text").textContent =
       `Answer: ${exercise.chordDef.label} — ${exercise.slashSymbol} (${exercise.inversionLabel}: ${exercise.voicedNotes.join(" – ")})`;
 
@@ -225,8 +289,10 @@ export class ChordQuizPanel {
     if (exercise.resolution) {
       resBtn.textContent = `Resolve to ${exercise.resolution.label}`;
       resBtn.classList.remove("hidden");
+      this._renderResolutionRules(exercise);
     } else {
       resBtn.classList.add("hidden");
+      this.container.querySelector("#chord-resolution-rules-wrap").classList.add("hidden");
     }
   }
 
