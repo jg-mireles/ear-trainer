@@ -1,5 +1,5 @@
 // theory/IntervalGenerator.js
-// Generates tonic-anchored intervals in Major/Minor keys with strict, standard key-signature spelling (flats vs. sharps)
+// Generates tonic-anchored intervals in Major/Minor keys OR fully chromatic intervals from any starting note
 
 export const INTERVALS = [
   { id: "m2", tonal: "2m", name: "Minor 2nd", semitones: 1 },
@@ -39,8 +39,15 @@ export const SCALE_TYPES = [
   },
 ];
 
-// Standard circle-of-fifths key signatures supported by VexFlow
-// Maps any theoretical enharmonic choice to its standard key signature & accidental preference
+const CHROMATIC_STARTS_LOW = [
+  "C3", "Db3", "D3", "Eb3", "E3", "F3", "F#3", "G3", "Ab3", "A3", "Bb3", "B3",
+  "C4", "Db4", "D4", "Eb4", "E4", "F4", "F#4", "G4"
+];
+
+const CHROMATIC_STARTS_HIGH = [
+  "C4", "Db4", "D4", "Eb4", "E4", "F4", "F#4", "G4", "Ab4", "A4", "Bb4", "B4", "C5"
+];
+
 const KEY_SPELLING_TABLE = {
   major: {
     C:  { tonic: "C",  vexSig: "C",  useFlats: false },
@@ -63,17 +70,17 @@ const KEY_SPELLING_TABLE = {
     B:  { tonic: "B",  vexSig: "Bm",  useFlats: false },
     "F#": { tonic: "F#", vexSig: "F#m", useFlats: false },
     "C#": { tonic: "C#", vexSig: "C#m", useFlats: false },
-    Db: { tonic: "C#", vexSig: "C#m", useFlats: false }, // Db minor doesn't exist in standard key sigs -> C# minor (4 sharps)
+    Db: { tonic: "C#", vexSig: "C#m", useFlats: false },
     "G#": { tonic: "G#", vexSig: "G#m", useFlats: false },
-    Ab: { tonic: "Ab", vexSig: "Abm", useFlats: true },  // 7 flats
+    Ab: { tonic: "Ab", vexSig: "Abm", useFlats: true },
     "D#": { tonic: "D#", vexSig: "D#m", useFlats: false },
-    Eb: { tonic: "Eb", vexSig: "Ebm", useFlats: true },  // 6 flats
-    Bb: { tonic: "Bb", vexSig: "Bbm", useFlats: true },  // 5 flats
-    F:  { tonic: "F",  vexSig: "Fm",  useFlats: true },  // 4 flats
-    C:  { tonic: "C",  vexSig: "Cm",  useFlats: true },  // 3 flats
-    G:  { tonic: "G",  vexSig: "Gm",  useFlats: true },  // 2 flats
-    D:  { tonic: "D",  vexSig: "Dm",  useFlats: true },  // 1 flat
-    Gb: { tonic: "F#", vexSig: "F#m", useFlats: false }, // Gb minor -> F# minor (3 sharps)
+    Eb: { tonic: "Eb", vexSig: "Ebm", useFlats: true },
+    Bb: { tonic: "Bb", vexSig: "Bbm", useFlats: true },
+    F:  { tonic: "F",  vexSig: "Fm",  useFlats: true },
+    C:  { tonic: "C",  vexSig: "Cm",  useFlats: true },
+    G:  { tonic: "G",  vexSig: "Gm",  useFlats: true },
+    D:  { tonic: "D",  vexSig: "Dm",  useFlats: true },
+    Gb: { tonic: "F#", vexSig: "F#m", useFlats: false },
   },
 };
 
@@ -83,9 +90,6 @@ export class IntervalGenerator {
     return modeTable[keyTonic] || { tonic: "C", vexSig: "C", useFlats: false };
   }
 
-  /**
-   * Ensures a transposed note uses the proper flat or sharp spelling for the active key
-   */
   _spellForKey(noteWithOctave, useFlats) {
     const simplified = Tonal.Note.simplify(noteWithOctave);
     const midi = Tonal.Note.midi(simplified);
@@ -93,18 +97,13 @@ export class IntervalGenerator {
     return Tonal.Note.fromMidi(midi, { sharps: !useFlats });
   }
 
-  /**
-   * Returns the VexFlow key signature string (e.g., "Db", "F#", "Ebm", "C#m")
-   */
   getVexKeySignature(keyTonic, scaleType = "major") {
-    if (!keyTonic || keyTonic === "random") return null;
+    if (!keyTonic || keyTonic === "random" || keyTonic === "chromatic") return null;
     return this._getKeyMeta(keyTonic, scaleType).vexSig;
   }
 
-  /**
-   * Returns human-readable key name (e.g., "Db Major", "Eb Minor")
-   */
   getKeyDisplayName(keyTonic, scaleType = "major") {
+    if (keyTonic === "chromatic") return "Fully Chromatic (Any Starting Note)";
     if (!keyTonic || keyTonic === "random") return "Random Key";
     const meta = this._getKeyMeta(keyTonic, scaleType);
     const scaleLabel = scaleType === "minor" ? "Minor" : "Major";
@@ -122,6 +121,44 @@ export class IntervalGenerator {
         ? allowedIntervals
         : INTERVALS.map((i) => i.id);
 
+    const isDescending = direction === "descending";
+
+    // --- BRANCH 1: FULLY CHROMATIC MODE (Any starting note, any active interval) ---
+    if (keyTonic === "chromatic") {
+      const candidateIntervals = INTERVALS.filter((i) => activeIds.includes(i.id));
+      const pool = candidateIntervals.length > 0 ? candidateIntervals : INTERVALS;
+      const interval = pool[Math.floor(Math.random() * pool.length)];
+
+      const startPool = isDescending ? CHROMATIC_STARTS_HIGH : CHROMATIC_STARTS_LOW;
+      const startNote = startPool[Math.floor(Math.random() * startPool.length)];
+      const useFlats = startNote.includes("b");
+
+      const rawTarget = isDescending
+        ? Tonal.Note.transpose(startNote, `-${interval.tonal}`)
+        : Tonal.Note.transpose(startNote, interval.tonal);
+
+      const targetNote =
+        rawTarget.includes("##") || rawTarget.includes("bb")
+          ? this._spellForKey(rawTarget, useFlats)
+          : Tonal.Note.simplify(rawTarget);
+
+      const lowerNote = isDescending ? targetNote : startNote;
+
+      return {
+        interval,
+        direction,
+        notes: [startNote, targetNote],
+        playbackMode: direction === "harmonic" ? "harmonic" : "melodic",
+        keySignature: null,
+        isChromatic: true,
+        activeKeyTonic: Tonal.Note.pitchClass(lowerNote),
+        activeScaleType: "major",
+        activeKeyLabel: "Fully Chromatic",
+        useFlats,
+      };
+    }
+
+    // --- BRANCH 2: TONAL KEY MODE (Specific or Random Key, Tonic-Anchored) ---
     const resolvedKeyTonic =
       keyTonic === "random"
         ? KEY_TONICS[Math.floor(Math.random() * KEY_TONICS.length)]
@@ -135,7 +172,6 @@ export class IntervalGenerator {
     const keySignature = keyMeta.vexSig;
     const activeKeyLabel = this.getKeyDisplayName(keyMeta.tonic, resolvedScaleType);
 
-    const isDescending = direction === "descending";
     const diatonicIds = isDescending
       ? scaleDef.descendingIntervalIds
       : scaleDef.ascendingIntervalIds;
@@ -159,10 +195,10 @@ export class IntervalGenerator {
       ? Tonal.Note.transpose(tonicNote, `-${interval.tonal}`)
       : Tonal.Note.transpose(tonicNote, interval.tonal);
 
-    // Keep exact diatonic letter spelling when valid, and prevent double-sharps/double-flats
-    const secondNote = rawSecondNote.includes("##") || rawSecondNote.includes("bb")
-      ? this._spellForKey(rawSecondNote, keyMeta.useFlats)
-      : rawSecondNote;
+    const secondNote =
+      rawSecondNote.includes("##") || rawSecondNote.includes("bb")
+        ? this._spellForKey(rawSecondNote, keyMeta.useFlats)
+        : rawSecondNote;
 
     return {
       interval,
@@ -170,6 +206,7 @@ export class IntervalGenerator {
       notes: [tonicNote, secondNote],
       playbackMode: direction === "harmonic" ? "harmonic" : "melodic",
       keySignature,
+      isChromatic: false,
       activeKeyTonic: keyMeta.tonic,
       activeScaleType: resolvedScaleType,
       activeKeyLabel,
@@ -181,10 +218,12 @@ export class IntervalGenerator {
     const sortedIntervalNotes = [...exercise.notes].sort(
       (a, b) => Tonal.Note.midi(a) - Tonal.Note.midi(b)
     );
-    const tonicNote = exercise.notes[0];
+    const tonicNote = exercise.isChromatic
+      ? sortedIntervalNotes[0]
+      : exercise.notes[0];
     const useFlats = Boolean(exercise.useFlats);
 
-    const isMinor = exercise.activeScaleType === "minor";
+    const isMinor = !exercise.isChromatic && exercise.activeScaleType === "minor";
     const scaleDef =
       SCALE_TYPES.find((s) => s.id === (exercise.activeScaleType || "major")) ||
       SCALE_TYPES[0];
