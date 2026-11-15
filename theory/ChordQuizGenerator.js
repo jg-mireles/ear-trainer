@@ -57,10 +57,37 @@ export class ChordQuizGenerator {
     }
 
     const invObj = INVERSIONS.find((inv) => inv.id === inversion) || INVERSIONS[0];
-    const symbol = `${rootPitchClass}${chordDef.tonal}`; const bassPitchClass = Tonal.Note.pitchClass(voicedNotes[0]); const slashSymbol = inversion > 0 ? `${symbol}/${bassPitchClass}` : symbol;  return { chordDef, inversion, inversionLabel: invObj.label, rootNote, symbol, slashSymbol, voicedNotes, playbackNotes, playbackMode: playbackStyle === "harmonic" ? "harmonic" : "melodic", resolution: this.buildResolution(rootNote, chordDef, voicedNotes), }; }  /** * Resolves tendency tones voice-by-voice from the active inversion and logs the part-writing rules */ buildResolution(rootNote, chordDef, voicedNotes) { let targetRoot = null; let targetLabel = "";  if (chordDef.id === "sus4" \vert{}\vert{} chordDef.id === "sus2") { targetRoot = rootNote; targetLabel = `${Tonal.Note.pitchClass(targetRoot)} Major (I)`;
+    const symbol = `${rootPitchClass}${chordDef.tonal}`;
+    const bassPitchClass = Tonal.Note.pitchClass(voicedNotes[0]);
+    const slashSymbol = inversion > 0 ? `${symbol}/${bassPitchClass}` : symbol;
+
+    return {
+      chordDef,
+      inversion,
+      inversionLabel: invObj.label,
+      rootNote,
+      symbol,
+      slashSymbol,
+      voicedNotes,
+      playbackNotes,
+      playbackMode: playbackStyle === "harmonic" ? "harmonic" : "melodic",
+      resolution: this.buildResolution(rootNote, chordDef, voicedNotes),
+    };
+  }
+
+  buildResolution(rootNote, chordDef, voicedNotes) {
+    let targetRoot = null;
+    let targetLabel = "";
+
+    if (chordDef.id === "sus4" || chordDef.id === "sus2") {
+      targetRoot = rootNote;
+      targetLabel = `${Tonal.Note.pitchClass(targetRoot)} Major (I)`;
     } else if (chordDef.id === "7" || chordDef.id === "aug") {
       targetRoot = Tonal.Note.transpose(rootNote, "4P");
-      targetLabel = `${Tonal.Note.pitchClass(targetRoot)} Major (I)`; } else if (chordDef.id === "dim" \vert{}\vert{} chordDef.id === "dim7" \vert{}\vert{} chordDef.id === "m7b5") { targetRoot = Tonal.Note.transpose(rootNote, "2m"); targetLabel = `${Tonal.Note.pitchClass(targetRoot)} Major (I)`;
+      targetLabel = `${Tonal.Note.pitchClass(targetRoot)} Major (I)`;
+    } else if (chordDef.id === "dim" || chordDef.id === "dim7" || chordDef.id === "m7b5") {
+      targetRoot = Tonal.Note.transpose(rootNote, "2m");
+      targetLabel = `${Tonal.Note.pitchClass(targetRoot)} Major (I)`;
     } else {
       return null;
     }
@@ -90,18 +117,16 @@ export class ChordQuizGenerator {
       const fromMidi = Tonal.Note.midi(fromNote);
       const fromChroma = Tonal.Note.chroma(fromNote);
 
-      // Find nearest target chord tone (or lock Bass to Tonic root when resolving root-position V7/vii°)
       let bestNote = fromNote;
       let bestDist = Infinity;
 
       targetPcs.forEach((pc) => {
-        if (idx === 0 && pc !== tonicPc && pc !== thirdPc) return; // Keep clean bass on root or 3rd
+        if (idx === 0 && pc !== tonicPc && pc !== thirdPc) return;
         for (let oct = 2; oct <= 6; oct++) {
           const cand = `${pc}${oct}`;
           const m = Tonal.Note.midi(cand);
           if (m === null) continue;
           const dist = Math.abs(m - fromMidi);
-          // For Bass in root position V7, prefer root motion (P4 up / P5 down) to Tonic
           const bassRootBonus = idx === 0 && pc === tonicPc ? -3 : 0;
           if (dist + bassRootBonus < bestDist) {
             bestDist = dist + bassRootBonus;
@@ -113,7 +138,6 @@ export class ChordQuizGenerator {
       resolvedNotes.push(bestNote);
       const delta = Tonal.Note.midi(bestNote) - fromMidi;
 
-      // Determine specific voice-leading rule applied
       let reason = "";
       if (chordDef.id === "sus4" && fromChroma === thirdChroma) {
         reason = "Suspended 4th resolves down by half-step to Major 3rd";
@@ -127,7 +151,7 @@ export class ChordQuizGenerator {
         (chordDef.id === "7" && fromChroma === thirdChroma) ||
         (["dim", "dim7", "m7b5"].includes(chordDef.id) && fromChroma === rootChroma)
       ) {
-        reason = "Leading tone (7̂) resolves up by half-step to tonic (1̂)";
+        reason = "Leading tone (7th degree) resolves up by half-step to tonic";
       } else if (
         ["dim", "dim7", "m7b5"].includes(chordDef.id) &&
         fromChroma === fifthChroma
@@ -142,14 +166,17 @@ export class ChordQuizGenerator {
             ? `Stepwise bass resolution (${delta > 0 ? "up" : "down"})`
             : `Authentic bass root motion (${delta > 0 ? "+" : ""}${delta} st)`;
       } else {
-        reason = `Smooth stepwise motion (${delta > 0 ? "up" : "down"} ${Math.abs(delta)} st)`; }  voiceExplanations.push({ voice: voiceNames[idx] \vert{}\vert{} `Voice ${idx + 1}`,
+        reason = `Smooth stepwise motion (${delta > 0 ? "up" : "down"} ${Math.abs(delta)} st)`;
+      }
+
+      voiceExplanations.push({
+        voice: voiceNames[idx] || `Voice ${idx + 1}`,
         from: fromNote,
         to: bestNote,
         reason,
       });
     });
 
-    // Check parallel 5ths/8ves and contrary motion
     const ruleChecks = [];
     let hasParallel = false;
     for (let i = 0; i < voicedNotes.length; i++) {
@@ -163,9 +190,9 @@ export class ChordQuizGenerator {
         }
       }
     }
-    if (!hasParallel) ruleChecks.push("✓ No parallel 5ths or octaves");
+    if (!hasParallel) ruleChecks.push("No parallel 5ths or octaves");
     if (commonTones > 0) {
-      ruleChecks.push(`✓ ${commonTones} common tone${commonTones > 1 ? "s" : ""} retained`);
+      ruleChecks.push(`${commonTones} common tone${commonTones > 1 ? "s" : ""} retained`);
     }
 
     const bassMove = Tonal.Note.midi(resolvedNotes[0]) - Tonal.Note.midi(voicedNotes[0]);
@@ -173,7 +200,7 @@ export class ChordQuizGenerator {
       Tonal.Note.midi(resolvedNotes[resolvedNotes.length - 1]) -
       Tonal.Note.midi(voicedNotes[voicedNotes.length - 1]);
     if (bassMove !== 0 && sopMove !== 0 && Math.sign(bassMove) !== Math.sign(sopMove)) {
-      ruleChecks.push("✓ Contrary motion between outer voices");
+      ruleChecks.push("Contrary motion between outer voices");
     }
 
     return {
@@ -183,4 +210,3 @@ export class ChordQuizGenerator {
       ruleChecks,
     };
   }
-}
