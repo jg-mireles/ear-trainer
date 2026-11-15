@@ -1,5 +1,5 @@
 // theory/ChordQuizGenerator.js
-// Generates single-chord & inversion exercises using Tonal.js
+// Generates single-chord & inversion exercises with smooth voice-led resolutions & rule explanations
 
 export const CHORD_TYPES = [
   { id: "M", label: "Major", tonal: "", intervals: ["1P", "3M", "5P"], category: "triad" },
@@ -25,13 +25,6 @@ export const INVERSIONS = [
 const CLEAN_ROOTS = ["C3", "D3", "Eb3", "E3", "F3", "G3", "Ab3", "A3", "Bb3", "C4", "D4", "Eb4", "E4", "F4"];
 
 export class ChordQuizGenerator {
-  /**
-   * Generates a single-chord exercise
-   * @param {Object} opts
-   * @param {string[]} opts.allowedChords - Array of chord IDs (e.g., ["M", "m", "dim", "aug"])
-   * @param {number[]} opts.allowedInversions - Array of inversion numbers (e.g., [0] or [0, 1, 2])
-   * @param {string} opts.playbackStyle - "harmonic" | "arp-up" | "arp-down"
-   */
   createExercise({
     allowedChords = CHORD_TYPES.map((c) => c.id),
     allowedInversions = [0],
@@ -44,69 +37,150 @@ export class ChordQuizGenerator {
     const rootNote = CLEAN_ROOTS[Math.floor(Math.random() * CLEAN_ROOTS.length)];
     const rootPitchClass = Tonal.Note.pitchClass(rootNote);
 
-    // Build close-position root notes from exact intervals
     const rootVoicing = chordDef.intervals.map((ivl) => Tonal.Note.transpose(rootNote, ivl));
 
-    // Filter valid inversions (3rd inversion only applies to 4-note 7th chords)
     const maxInv = rootVoicing.length - 1;
     const validInvs = allowedInversions.filter((inv) => inv >= 0 && inv <= maxInv);
     const inversion = validInvs.length
       ? validInvs[Math.floor(Math.random() * validInvs.length)]
       : 0;
 
-    // Rotate lower voices up an octave for the chosen inversion
     const voicedNotes = [...rootVoicing];
     for (let i = 0; i < inversion; i++) {
       const bottom = voicedNotes.shift();
       voicedNotes.push(Tonal.Note.transpose(bottom, "8P"));
     }
 
-    // Order notes according to playback style
     let playbackNotes = [...voicedNotes];
     if (playbackStyle === "arp-down") {
       playbackNotes = [...voicedNotes].reverse();
     }
 
     const invObj = INVERSIONS.find((inv) => inv.id === inversion) || INVERSIONS[0];
-    const symbol = `${rootPitchClass}${chordDef.tonal}`;
-    const bassPitchClass = Tonal.Note.pitchClass(voicedNotes[0]);
-    const slashSymbol = inversion > 0 ? `${symbol}/${bassPitchClass}` : symbol;
+    const symbol = `${rootPitchClass}${chordDef.tonal}`; const bassPitchClass = Tonal.Note.pitchClass(voicedNotes[0]); const slashSymbol = inversion > 0 ? `${symbol}/${bassPitchClass}` : symbol;  return { chordDef, inversion, inversionLabel: invObj.label, rootNote, symbol, slashSymbol, voicedNotes, playbackNotes, playbackMode: playbackStyle === "harmonic" ? "harmonic" : "melodic", resolution: this.buildResolution(rootNote, chordDef, voicedNotes), }; }  /** * Resolves tendency tones voice-by-voice from the active inversion and logs the part-writing rules */ buildResolution(rootNote, chordDef, voicedNotes) { let targetRoot = null; let targetLabel = "";  if (chordDef.id === "sus4" \vert{}\vert{} chordDef.id === "sus2") { targetRoot = rootNote; targetLabel = `${Tonal.Note.pitchClass(targetRoot)} Major (I)`;
+    } else if (chordDef.id === "7" || chordDef.id === "aug") {
+      targetRoot = Tonal.Note.transpose(rootNote, "4P");
+      targetLabel = `${Tonal.Note.pitchClass(targetRoot)} Major (I)`; } else if (chordDef.id === "dim" \vert{}\vert{} chordDef.id === "dim7" \vert{}\vert{} chordDef.id === "m7b5") { targetRoot = Tonal.Note.transpose(rootNote, "2m"); targetLabel = `${Tonal.Note.pitchClass(targetRoot)} Major (I)`;
+    } else {
+      return null;
+    }
+
+    const tonicPc = Tonal.Note.pitchClass(targetRoot);
+    const thirdPc = Tonal.Note.pitchClass(Tonal.Note.transpose(targetRoot, "3M"));
+    const fifthPc = Tonal.Note.pitchClass(Tonal.Note.transpose(targetRoot, "5P"));
+    const targetPcs = [tonicPc, thirdPc, fifthPc];
+
+    const rootChroma = Tonal.Note.chroma(rootNote);
+    const thirdChroma = Tonal.Note.chroma(Tonal.Note.transpose(rootNote, chordDef.intervals[1]));
+    const fifthChroma = Tonal.Note.chroma(Tonal.Note.transpose(rootNote, chordDef.intervals[2]));
+    const seventhChroma = chordDef.intervals[3]
+      ? Tonal.Note.chroma(Tonal.Note.transpose(rootNote, chordDef.intervals[3]))
+      : null;
+
+    const voiceNames =
+      voicedNotes.length === 4
+        ? ["Bass", "Tenor", "Alto", "Soprano"]
+        : ["Bass", "Middle Voice", "Soprano"];
+
+    const resolvedNotes = [];
+    const voiceExplanations = [];
+    let commonTones = 0;
+
+    voicedNotes.forEach((fromNote, idx) => {
+      const fromMidi = Tonal.Note.midi(fromNote);
+      const fromChroma = Tonal.Note.chroma(fromNote);
+
+      // Find nearest target chord tone (or lock Bass to Tonic root when resolving root-position V7/vii°)
+      let bestNote = fromNote;
+      let bestDist = Infinity;
+
+      targetPcs.forEach((pc) => {
+        if (idx === 0 && pc !== tonicPc && pc !== thirdPc) return; // Keep clean bass on root or 3rd
+        for (let oct = 2; oct <= 6; oct++) {
+          const cand = `${pc}${oct}`;
+          const m = Tonal.Note.midi(cand);
+          if (m === null) continue;
+          const dist = Math.abs(m - fromMidi);
+          // For Bass in root position V7, prefer root motion (P4 up / P5 down) to Tonic
+          const bassRootBonus = idx === 0 && pc === tonicPc ? -3 : 0;
+          if (dist + bassRootBonus < bestDist) {
+            bestDist = dist + bassRootBonus;
+            bestNote = cand;
+          }
+        }
+      });
+
+      resolvedNotes.push(bestNote);
+      const delta = Tonal.Note.midi(bestNote) - fromMidi;
+
+      // Determine specific voice-leading rule applied
+      let reason = "";
+      if (chordDef.id === "sus4" && fromChroma === thirdChroma) {
+        reason = "Suspended 4th resolves down by half-step to Major 3rd";
+      } else if (chordDef.id === "sus2" && fromChroma === thirdChroma) {
+        reason = "Suspended 2nd resolves up by whole-step to Major 3rd";
+      } else if (chordDef.id === "aug" && fromChroma === fifthChroma) {
+        reason = "Raised 5th (#5) resolves up by half-step to 3rd of tonic";
+      } else if (seventhChroma !== null && fromChroma === seventhChroma) {
+        reason = "Chordal 7th resolves down by step to 3rd of tonic";
+      } else if (
+        (chordDef.id === "7" && fromChroma === thirdChroma) ||
+        (["dim", "dim7", "m7b5"].includes(chordDef.id) && fromChroma === rootChroma)
+      ) {
+        reason = "Leading tone (7̂) resolves up by half-step to tonic (1̂)";
+      } else if (
+        ["dim", "dim7", "m7b5"].includes(chordDef.id) &&
+        fromChroma === fifthChroma
+      ) {
+        reason = "Diminished 5th (tritone) contracts inward down by step";
+      } else if (delta === 0) {
+        commonTones++;
+        reason = "Common tone held stationary";
+      } else if (idx === 0) {
+        reason =
+          Math.abs(delta) <= 2
+            ? `Stepwise bass resolution (${delta > 0 ? "up" : "down"})`
+            : `Authentic bass root motion (${delta > 0 ? "+" : ""}${delta} st)`;
+      } else {
+        reason = `Smooth stepwise motion (${delta > 0 ? "up" : "down"} ${Math.abs(delta)} st)`; }  voiceExplanations.push({ voice: voiceNames[idx] \vert{}\vert{} `Voice ${idx + 1}`,
+        from: fromNote,
+        to: bestNote,
+        reason,
+      });
+    });
+
+    // Check parallel 5ths/8ves and contrary motion
+    const ruleChecks = [];
+    let hasParallel = false;
+    for (let i = 0; i < voicedNotes.length; i++) {
+      for (let j = i + 1; j < voicedNotes.length; j++) {
+        const d1 = (Tonal.Note.midi(voicedNotes[j]) - Tonal.Note.midi(voicedNotes[i])) % 12;
+        const d2 = (Tonal.Note.midi(resolvedNotes[j]) - Tonal.Note.midi(resolvedNotes[i])) % 12;
+        const m1 = Tonal.Note.midi(resolvedNotes[i]) - Tonal.Note.midi(voicedNotes[i]);
+        const m2 = Tonal.Note.midi(resolvedNotes[j]) - Tonal.Note.midi(voicedNotes[j]);
+        if (m1 !== 0 && Math.sign(m1) === Math.sign(m2) && (d1 === 7 || d1 === 0) && d1 === d2) {
+          hasParallel = true;
+        }
+      }
+    }
+    if (!hasParallel) ruleChecks.push("✓ No parallel 5ths or octaves");
+    if (commonTones > 0) {
+      ruleChecks.push(`✓ ${commonTones} common tone${commonTones > 1 ? "s" : ""} retained`);
+    }
+
+    const bassMove = Tonal.Note.midi(resolvedNotes[0]) - Tonal.Note.midi(voicedNotes[0]);
+    const sopMove =
+      Tonal.Note.midi(resolvedNotes[resolvedNotes.length - 1]) -
+      Tonal.Note.midi(voicedNotes[voicedNotes.length - 1]);
+    if (bassMove !== 0 && sopMove !== 0 && Math.sign(bassMove) !== Math.sign(sopMove)) {
+      ruleChecks.push("✓ Contrary motion between outer voices");
+    }
 
     return {
-      chordDef,
-      inversion,
-      inversionLabel: invObj.label,
-      rootNote,
-      symbol,
-      slashSymbol,
-      voicedNotes,     // Always bottom-to-top for staff notation
-      playbackNotes,   // Ordered for audio playback
-      playbackMode: playbackStyle === "harmonic" ? "harmonic" : "melodic",
-      resolution: this.buildResolution(rootNote, chordDef),
+      label: targetLabel,
+      notes: resolvedNotes,
+      voiceExplanations,
+      ruleChecks,
     };
-  }
-
-  /**
-   * Builds a natural target resolution chord (e.g., V7 -> I, vii°7 -> I, sus4 -> M)
-   */
-  buildResolution(rootNote, chordDef) {
-    if (chordDef.id === "sus4" || chordDef.id === "sus2") {
-      const targetNotes = ["1P", "3M", "5P"].map((ivl) => Tonal.Note.transpose(rootNote, ivl));
-      const tonic = Tonal.Note.pitchClass(rootNote);
-      return { label: `${tonic} Major`, notes: targetNotes };
-    }
-    if (chordDef.id === "7") {
-      const tonicRoot = Tonal.Note.transpose(rootNote, "4P");
-      const tonic = Tonal.Note.pitchClass(tonicRoot);
-      const targetNotes = ["1P", "3M", "5P"].map((ivl) => Tonal.Note.transpose(tonicRoot, ivl));
-      return { label: `${tonic} Major (I)`, notes: targetNotes };
-    }
-    if (chordDef.id === "dim" || chordDef.id === "dim7" || chordDef.id === "m7b5") {
-      const tonicRoot = Tonal.Note.transpose(rootNote, "2m");
-      const tonic = Tonal.Note.pitchClass(tonicRoot);
-      const targetNotes = ["1P", "3M", "5P"].map((ivl) => Tonal.Note.transpose(tonicRoot, ivl));
-      return { label: `${tonic} Major (I)`, notes: targetNotes };
-    }
-    return null;
   }
 }
