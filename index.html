@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Harmonic Ear Trainer</title>
-  <link rel="stylesheet" href="styles.css?v=31" />
+  <link rel="stylesheet" href="styles.css?v=32" />
   <!-- External Audio, Music Theory, and Notation Libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tonal/browser/tonal.min.js"></script>
@@ -13,15 +13,21 @@
 <body>
   <div class="app-shell">
     <header>
-      <h1>Harmonic Ear Trainer</h1>
+      <div>
+        <h1>Harmonic Ear Trainer</h1>
+        <div class="mode-toggle" style="margin-top: 8px; display: inline-flex;">
+          <button type="button" id="nav-intervals" class="active">1. Intervals</button>
+          <button type="button" id="nav-chords">2. Chords & Inversions</button>
+        </div>
+      </div>
       <span id="status-badge">Loading piano samples...</span>
     </header>
 
-    <!-- Controls & Harmonic Synth Lab injected by ControlsPanel.js -->
+    <!-- Shared Controls & Harmonic Synth Lab (ControlsPanel.js) -->
     <div id="controls-container"></div>
 
-    <!-- Ear Training Answer Deck & Notation Reveal -->
-    <section class="panel-card">
+    <!-- VIEW A: Interval Answer Deck -->
+    <section id="interval-quiz-section" class="panel-card">
       <div class="section-header">
         <h2>3. Identify the Interval</h2>
       </div>
@@ -32,13 +38,18 @@
           Hear in Context (Tonic Triad → Scale → Interval ↑)
         </button>
       </div>
-      <div id="staff-container" class="staff-wrapper"></div>
+      <div id="harmony-context-container"></div>
+    </section>
 
-      <!-- Collapsible Extra Musical Context Drawer (hidden until answer reveal) -->
-      <div id="harmony-context-container" class="hidden"></div>
+    <!-- VIEW B: Single Chords & Inversions Deck (ChordQuizPanel.js) -->
+    <div id="chord-quiz-container" class="hidden"></div>
+
+    <!-- Shared Grand Staff Display -->
+    <section class="panel-card">
+      <div id="staff-container" class="staff-wrapper"></div>
     </section>
   </div>
 
-  <script type="module" src="main.js?v=29"></script>
+  <script type="module" src="main.js?v=32"></script>
 </body>
 </html>
