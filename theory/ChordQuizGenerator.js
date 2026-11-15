@@ -12,31 +12,31 @@ export const CHORD_TYPES = [
   { id: "7", label: "Dominant 7th", tonal: "7", intervals: ["1P", "3M", "5P", "7m"], category: "seventh" },
   { id: "m7", label: "Minor 7th", tonal: "m7", intervals: ["1P", "3m", "5P", "7m"], category: "seventh" },
   { id: "m7b5", label: "Half-Dim 7th", tonal: "m7b5", intervals: ["1P", "3m", "5d", "7m"], category: "seventh" },
-  { id: "dim7", label: "Diminished 7th", tonal: "dim7", intervals: ["1P", "3m", "5d", "7d"], category: "seventh" },
+  { id: "dim7", label: "Diminished 7th", tonal: "dim7", intervals: ["1P", "3m", "5d", "7d"], category: "seventh" }
 ];
 
 export const INVERSIONS = [
   { id: 0, label: "Root Position" },
   { id: 1, label: "1st Inversion" },
   { id: 2, label: "2nd Inversion" },
-  { id: 3, label: "3rd Inversion (7ths)" },
+  { id: 3, label: "3rd Inversion (7ths)" }
 ];
 
 const CLEAN_ROOTS = ["C3", "D3", "Eb3", "E3", "F3", "G3", "Ab3", "A3", "Bb3", "C4", "D4", "Eb4", "E4", "F4"];
 
 export class ChordQuizGenerator {
-  createExercise({
-    allowedChords = CHORD_TYPES.map((c) => c.id),
-    allowedInversions = [0],
-    playbackStyle = "harmonic",
-  } = {}) {
+  createExercise(options) {
+    const opts = options || {};
+    const allowedChords = opts.allowedChords || CHORD_TYPES.map((c) => c.id);
+    const allowedInversions = opts.allowedInversions || [0];
+    const playbackStyle = opts.playbackStyle || "harmonic";
+
     const pool = CHORD_TYPES.filter((c) => allowedChords.includes(c.id));
     const activePool = pool.length ? pool : CHORD_TYPES.slice(0, 4);
     const chordDef = activePool[Math.floor(Math.random() * activePool.length)];
 
     const rootNote = CLEAN_ROOTS[Math.floor(Math.random() * CLEAN_ROOTS.length)];
     const rootPitchClass = Tonal.Note.pitchClass(rootNote);
-
     const rootVoicing = chordDef.intervals.map((ivl) => Tonal.Note.transpose(rootNote, ivl));
 
     const maxInv = rootVoicing.length - 1;
@@ -51,27 +51,26 @@ export class ChordQuizGenerator {
       voicedNotes.push(Tonal.Note.transpose(bottom, "8P"));
     }
 
-    let playbackNotes = [...voicedNotes];
-    if (playbackStyle === "arp-down") {
-      playbackNotes = [...voicedNotes].reverse();
-    }
+    const playbackNotes = playbackStyle === "arp-down"
+      ? [...voicedNotes].reverse()
+      : [...voicedNotes];
 
     const invObj = INVERSIONS.find((inv) => inv.id === inversion) || INVERSIONS[0];
-    const symbol = `${rootPitchClass}${chordDef.tonal}`;
+    const symbol = rootPitchClass + chordDef.tonal;
     const bassPitchClass = Tonal.Note.pitchClass(voicedNotes[0]);
-    const slashSymbol = inversion > 0 ? `${symbol}/${bassPitchClass}` : symbol;
+    const slashSymbol = inversion > 0 ? symbol + "/" + bassPitchClass : symbol;
 
     return {
-      chordDef,
-      inversion,
+      chordDef: chordDef,
+      inversion: inversion,
       inversionLabel: invObj.label,
-      rootNote,
-      symbol,
-      slashSymbol,
-      voicedNotes,
-      playbackNotes,
+      rootNote: rootNote,
+      symbol: symbol,
+      slashSymbol: slashSymbol,
+      voicedNotes: voicedNotes,
+      playbackNotes: playbackNotes,
       playbackMode: playbackStyle === "harmonic" ? "harmonic" : "melodic",
-      resolution: this.buildResolution(rootNote, chordDef, voicedNotes),
+      resolution: this.buildResolution(rootNote, chordDef, voicedNotes)
     };
   }
 
@@ -81,13 +80,13 @@ export class ChordQuizGenerator {
 
     if (chordDef.id === "sus4" || chordDef.id === "sus2") {
       targetRoot = rootNote;
-      targetLabel = `${Tonal.Note.pitchClass(targetRoot)} Major (I)`;
+      targetLabel = Tonal.Note.pitchClass(targetRoot) + " Major (I)";
     } else if (chordDef.id === "7" || chordDef.id === "aug") {
       targetRoot = Tonal.Note.transpose(rootNote, "4P");
-      targetLabel = `${Tonal.Note.pitchClass(targetRoot)} Major (I)`;
+      targetLabel = Tonal.Note.pitchClass(targetRoot) + " Major (I)";
     } else if (chordDef.id === "dim" || chordDef.id === "dim7" || chordDef.id === "m7b5") {
       targetRoot = Tonal.Note.transpose(rootNote, "2m");
-      targetLabel = `${Tonal.Note.pitchClass(targetRoot)} Major (I)`;
+      targetLabel = Tonal.Note.pitchClass(targetRoot) + " Major (I)";
     } else {
       return null;
     }
@@ -104,10 +103,9 @@ export class ChordQuizGenerator {
       ? Tonal.Note.chroma(Tonal.Note.transpose(rootNote, chordDef.intervals[3]))
       : null;
 
-    const voiceNames =
-      voicedNotes.length === 4
-        ? ["Bass", "Tenor", "Alto", "Soprano"]
-        : ["Bass", "Middle Voice", "Soprano"];
+    const voiceNames = voicedNotes.length === 4
+      ? ["Bass", "Tenor", "Alto", "Soprano"]
+      : ["Bass", "Middle Voice", "Soprano"];
 
     const resolvedNotes = [];
     const voiceExplanations = [];
@@ -123,7 +121,7 @@ export class ChordQuizGenerator {
       targetPcs.forEach((pc) => {
         if (idx === 0 && pc !== tonicPc && pc !== thirdPc) return;
         for (let oct = 2; oct <= 6; oct++) {
-          const cand = `${pc}${oct}`;
+          const cand = pc + String(oct);
           const m = Tonal.Note.midi(cand);
           if (m === null) continue;
           const dist = Math.abs(m - fromMidi);
@@ -161,19 +159,18 @@ export class ChordQuizGenerator {
         commonTones++;
         reason = "Common tone held stationary";
       } else if (idx === 0) {
-        reason =
-          Math.abs(delta) <= 2
-            ? `Stepwise bass resolution (${delta > 0 ? "up" : "down"})`
-            : `Authentic bass root motion (${delta > 0 ? "+" : ""}${delta} st)`;
+        reason = Math.abs(delta) <= 2
+          ? "Stepwise bass resolution (" + (delta > 0 ? "up" : "down") + ")"
+          : "Authentic bass root motion (" + (delta > 0 ? "+" : "") + String(delta) + " st)";
       } else {
-        reason = `Smooth stepwise motion (${delta > 0 ? "up" : "down"} ${Math.abs(delta)} st)`;
+        reason = "Smooth stepwise motion (" + (delta > 0 ? "up" : "down") + " " + String(Math.abs(delta)) + " st)";
       }
 
       voiceExplanations.push({
-        voice: voiceNames[idx] || `Voice ${idx + 1}`,
+        voice: voiceNames[idx] || "Voice " + String(idx + 1),
         from: fromNote,
         to: bestNote,
-        reason,
+        reason: reason
       });
     });
 
@@ -192,7 +189,7 @@ export class ChordQuizGenerator {
     }
     if (!hasParallel) ruleChecks.push("No parallel 5ths or octaves");
     if (commonTones > 0) {
-      ruleChecks.push(`${commonTones} common tone${commonTones > 1 ? "s" : ""} retained`);
+      ruleChecks.push(String(commonTones) + " common tone" + (commonTones > 1 ? "s" : "") + " retained");
     }
 
     const bassMove = Tonal.Note.midi(resolvedNotes[0]) - Tonal.Note.midi(voicedNotes[0]);
@@ -206,7 +203,8 @@ export class ChordQuizGenerator {
     return {
       label: targetLabel,
       notes: resolvedNotes,
-      voiceExplanations,
-      ruleChecks,
+      voiceExplanations: voiceExplanations,
+      ruleChecks: ruleChecks
     };
   }
+}
