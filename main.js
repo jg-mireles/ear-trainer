@@ -1,11 +1,13 @@
 // main.js
-// Orchestrates Audio, Theory, Notation, and UI modules
+// Orchestrates Audio, Theory, Notation, and UI modules (Intervals + Chords)
 
-import { SoundEngine } from "./audio/SoundEngine.js?v=31";
-import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=31";
-import { StaffRenderer } from "./notation/StaffRenderer.js?v=31";
-import { ControlsPanel } from "./ui/ControlsPanel.js?v=31";
-import { HarmonyContextDrawer } from "./ui/HarmonyContextDrawer.js?v=31";
+import { SoundEngine } from "./audio/SoundEngine.js?v=32";
+import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=32";
+import { ChordQuizGenerator } from "./theory/ChordQuizGenerator.js?v=32";
+import { StaffRenderer } from "./notation/StaffRenderer.js?v=32";
+import { ControlsPanel } from "./ui/ControlsPanel.js?v=32";
+import { HarmonyContextDrawer } from "./ui/HarmonyContextDrawer.js?v=32";
+import { ChordQuizPanel } from "./ui/ChordQuizPanel.js?v=32";
 
 const statusBadge = document.getElementById("status-badge");
 const feedbackText = document.getElementById("feedback-text");
@@ -13,15 +15,22 @@ const quizGrid = document.getElementById("quiz-grid");
 const contextBtn = document.getElementById("btn-context");
 const harmonyContainer = document.getElementById("harmony-context-container");
 
+const navIntervalsBtn = document.getElementById("nav-intervals");
+const navChordsBtn = document.getElementById("nav-chords");
+const intervalQuizSection = document.getElementById("interval-quiz-section");
+const chordQuizContainer = document.getElementById("chord-quiz-container");
+
 const engine = new SoundEngine(() => {
   statusBadge.textContent = "Piano Samples Ready";
 });
 const generator = new IntervalGenerator();
+const chordGenerator = new ChordQuizGenerator();
 const staff = new StaffRenderer("staff-container");
 
 staff.renderEmptyStaff(generator.getVexKeySignature("C", "major"));
 
 let currentExercise = null;
+let currentChordExercise = null;
 let lastOptions = null;
 let playbackTimers = [];
 
@@ -236,6 +245,93 @@ const controls = new ControlsPanel(
     },
   }
 );
+
+// Initialize Single Chords & Inversions Panel
+const chordPanel = new ChordQuizPanel(chordQuizContainer, {
+  onNewChord: async (opts) => {
+    clearPlaybackTimers();
+    await ensureAudioReady();
+    currentChordExercise = chordGenerator.createExercise(opts);
+    staff.renderEmptyStaff(null);
+    chordPanel.resetFeedback();
+    engine.playChord(currentChordExercise.playbackNotes, {
+      mode: currentChordExercise.playbackMode,
+      stagger: opts.stagger,
+      duration: Math.max(1.5, opts.stagger * 1.6),
+    });
+  },
+  onRepeatChord: async (opts) => {
+    if (!currentChordExercise) return;
+    clearPlaybackTimers();
+    await ensureAudioReady();
+    engine.playChord(currentChordExercise.playbackNotes, {
+      mode: currentChordExercise.playbackMode,
+      stagger: opts.stagger,
+      duration: Math.max(1.5, opts.stagger * 1.6),
+    });
+  },
+  onRevealChord: () => {
+    if (!currentChordExercise) return;
+    staff.renderNotes(currentChordExercise.voicedNotes, "harmonic", null);
+    chordPanel.showReveal(currentChordExercise);
+  },
+  onGuessChord: (guessedId, btn) => {
+    if (!currentChordExercise) {
+      chordPanel.resetFeedback("Click 'New Chord' first to start!");
+      return;
+    }
+    if (guessedId === currentChordExercise.chordDef.id) {
+      staff.renderNotes(currentChordExercise.voicedNotes, "harmonic", null);
+      chordPanel.showReveal(currentChordExercise);
+    } else {
+      chordPanel.markWrong(btn);
+    }
+  },
+  onPlayResolution: async () => {
+    if (!currentChordExercise?.resolution) return;
+    clearPlaybackTimers();
+    await ensureAudioReady();
+
+    staff.renderNotes(currentChordExercise.voicedNotes, "harmonic", null);
+    engine.playChord(currentChordExercise.voicedNotes, {
+      mode: "harmonic",
+      duration: 1.1,
+    });
+
+    const timerId = setTimeout(() => {
+      staff.renderNotes(currentChordExercise.resolution.notes, "harmonic", null);
+      engine.playChord(currentChordExercise.resolution.notes, {
+        mode: "harmonic",
+        duration: 1.6,
+      });
+    }, 1150);
+    playbackTimers.push(timerId);
+  },
+});
+
+// Top-Level View Switcher (Intervals <-> Chords & Inversions)
+function switchTopView(view) {
+  clearPlaybackTimers();
+  const isIntervals = view === "intervals";
+
+  navIntervalsBtn.classList.toggle("active", isIntervals);
+  navChordsBtn.classList.toggle("active", !isIntervals);
+
+  intervalQuizSection.classList.toggle("hidden", !isIntervals);
+  chordQuizContainer.classList.toggle("hidden", isIntervals);
+
+  // Hide only the Interval Exercise card inside ControlsPanel when in Chords mode,
+  // while keeping the Synth Lab rack visible if Hard Mode is active
+  const intervalControlsCard = document.querySelector("#controls-container > .panel-card:first-child");
+  if (intervalControlsCard) {
+    intervalControlsCard.classList.toggle("hidden", !isIntervals);
+  }
+
+  staff.renderEmptyStaff(isIntervals ? generator.getVexKeySignature(controls.state.keyTonic, controls.state.scaleType) : null);
+}
+
+navIntervalsBtn.addEventListener("click", () => switchTopView("intervals"));
+navChordsBtn.addEventListener("click", () => switchTopView("chords"));
 
 function buildQuizButtons() {
   quizGrid.innerHTML = INTERVALS.map(
