@@ -44,7 +44,7 @@ header h1 { margin: 0; font-size: 1.5rem; }
   margin-bottom: 18px;
 }
 
-.hidden { display: none; }
+.hidden { display: none !important; }
 
 .section-header {
   display: flex;
@@ -74,6 +74,7 @@ select, button {
   background: var(--bg);
   color: var(--text);
   cursor: pointer;
+  min-height: 40px;
 }
 
 .mode-toggle button.active {
@@ -126,6 +127,7 @@ select, button {
   padding: 3px 10px;
   font-size: 0.78rem;
   border-radius: 6px;
+  min-height: 28px;
 }
 
 .interval-chips {
@@ -142,6 +144,7 @@ select, button {
   background: var(--card);
   color: var(--muted);
   transition: all 0.12s ease;
+  min-height: 32px;
 }
 
 .interval-chip.selected {
@@ -179,7 +182,7 @@ select, button {
   cursor: pointer;
 }
 
-/* Quiz Answer Buttons & Staff */
+/* Quiz Answer Buttons & Fluid Grand Staff */
 .quiz-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -194,21 +197,13 @@ select, button {
   background: #ffffff;
   border-radius: 8px;
   padding: 10px;
+  width: 100%;
   min-height: 255px;
+  overflow-x: auto;
   display: flex;
   justify-content: center;
   align-items: center;
   margin-top: 14px;
-}
-
-#feedback-text { font-weight: 600; min-height: 1.5em; margin: 10px 0 0; }
-
-/* --- Cross-Device Fluid Staff & Touch Polish --- */
-.staff-wrapper {
-  width: 100%;
-  overflow-x: auto;
-  display: flex;
-  justify-content: center;
 }
 
 .staff-wrapper svg {
@@ -216,10 +211,7 @@ select, button {
   height: auto;
 }
 
-button,
-select {
-  min-height: 40px;
-}
+#feedback-text { font-weight: 600; min-height: 1.5em; margin: 10px 0 0; }
 
 /* --- Collapsible Harmony Context Drawer --- */
 .harmony-drawer {
@@ -312,6 +304,11 @@ select {
   background: rgba(0, 0, 0, 0.2);
 }
 
+.harmony-prog-row.active-prog {
+  border: 1px solid rgba(96, 165, 250, 0.5);
+  background: rgba(96, 165, 250, 0.1);
+}
+
 .harmony-prog-info {
   display: flex;
   flex-direction: column;
@@ -331,3 +328,37 @@ select {
   padding: 6px 12px;
   font-size: 0.85rem;
 }
+
+/* --- Multi-Measure SATB Score & Voice-Leading Breakdown --- */
+.harmony-rules-toggle {
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.satb-breakdown-box {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.satb-step-card {
+  padding: 8px 10px;
+  border-left: 3px solid #60a5fa;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 0 6px 6px 0;
+  font-size: 0.85rem;
+}
+
+.satb-step-title
