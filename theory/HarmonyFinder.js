@@ -98,7 +98,7 @@ const VOICE_RANGES = [
 export class HarmonyFinder {
   _getScaleNotes(keyTonic, scaleType) {
     const modeName = scaleType === "minor" ? "minor" : "major";
-    const scale = Tonal.Scale.get(`${keyTonic}${modeName}`);
+    const scale = Tonal.Scale.get(`${keyTonic} ${modeName}`);
     return scale.notes || [];
   }
 
@@ -114,9 +114,6 @@ export class HarmonyFinder {
     return out;
   }
 
-  /**
-   * Generates all legal 4-voice SATB chords [B, T, A, S] obeying range, doubling, and spacing rules
-   */
   _generateLegalSATBVoicings(chordSymbol, leadingToneChroma) {
     const info = Tonal.Chord.get(chordSymbol);
     const tones = info.notes || [];
@@ -127,7 +124,6 @@ export class HarmonyFinder {
     const fifthPc = tones[2];
     const seventhPc = tones[3] || null;
 
-    // Bass = root (keeps root-position functional clarity)
     const bassCandidates = this._notesInRange(rootPc, VOICE_RANGES[0].min, VOICE_RANGES[0].max);
     const tenorPool = tones.flatMap((pc) =>
       this._notesInRange(pc, VOICE_RANGES[1].min, VOICE_RANGES[1].max)
@@ -145,7 +141,6 @@ export class HarmonyFinder {
       for (const t of tenorPool) {
         if (t.midi < b.midi || t.midi - b.midi > 24) continue;
         for (const a of altoPool) {
-          // Rule: No voice crossing & upper adjacent voices within 1 octave (<= 12 semitones)
           if (a.midi < t.midi || a.midi - t.midi > 12) continue;
           for (const s of sopranoPool) {
             if (s.midi < a.midi || s.midi - a.midi > 12) continue;
@@ -153,26 +148,23 @@ export class HarmonyFinder {
             const chosen = [b, t, a, s];
             const chromas = chosen.map((v) => Tonal.Note.chroma(v.note));
 
-            // Rule: Never double the leading tone
             const ltCount = chromas.filter((c) => c === leadingToneChroma).length;
             if (ltCount > 1) continue;
 
-            // Check chord completeness & doubling rules
             const required = seventhPc
-              ? [rootPc, thirdPc, seventhPc] // 7th chord: allow omitting 5th if needed
-              : [rootPc, thirdPc, fifthPc]; // Triad: require all 3 tones
+              ? [rootPc, thirdPc, seventhPc]
+              : [rootPc, thirdPc, fifthPc];
             const reqChromas = required.map((pc) => Tonal.Note.chroma(pc));
             const hasAllRequired = reqChromas.every((rc) => chromas.includes(rc));
             if (!hasAllRequired) continue;
 
-            // For triads, prefer doubling the root (or 5th) over doubling the 3rd
             let internalPenalty = 0;
             if (!seventhPc) {
               const thirdChroma = Tonal.Note.chroma(thirdPc);
               const thirdCount = chromas.filter((c) => c === thirdChroma).length;
               if (thirdCount > 1) internalPenalty += 12;
             } else if (chromas.includes(Tonal.Note.chroma(fifthPc))) {
-              internalPenalty -= 1; // Slight bonus for complete 7th chord
+              internalPenalty -= 1;
             }
 
             legal.push({
@@ -189,15 +181,11 @@ export class HarmonyFinder {
     return legal;
   }
 
-  /**
-   * Scores transition prev -> curr using SATB part-writing rules and returns human-readable explanations
-   */
   _evaluateTransition(prev, curr, leadingToneChroma, tonicChroma) {
     let cost = curr.internalPenalty;
     const ruleChecks = [];
     const voiceExplanations = [];
 
-    // 1. Check Voice Overlap across adjacent voices
     if (
       curr.midis[1] < prev.midis[0] ||
       curr.midis[2] < prev.midis[1] ||
@@ -208,7 +196,6 @@ export class HarmonyFinder {
       cost += 200;
     }
 
-    // 2. Check Parallel 5ths & Parallel Octaves/Unisons across all 6 voice pairs
     let parallelViolation = false;
     for (let i = 0; i < 4; i++) {
       for (let j = i + 1; j < 4; j++) {
@@ -217,7 +204,6 @@ export class HarmonyFinder {
         const moveI = curr.midis[i] - prev.midis[i];
         const moveJ = curr.midis[j] - prev.midis[j];
 
-        // Parallel motion (both move in the same direction, non-zero)
         if (moveI !== 0 && Math.sign(moveI) === Math.sign(moveJ)) {
           if (diff1 === 7 && diff2 === 7) {
             cost += 1000;
@@ -235,7 +221,6 @@ export class HarmonyFinder {
       ruleChecks.push("✓ No parallel 5ths or octaves");
     }
 
-    // 3. Direct (Hidden) 5ths/8ves in Outer Voices (Bass & Soprano)
     const bassMove = curr.midis[0] - prev.midis[0];
     const sopMove = curr.midis[3] - prev.midis[3];
     const outerInterval = (curr.midis[3] - curr.midis[0]) % 12;
@@ -248,7 +233,6 @@ export class HarmonyFinder {
       cost += 60;
     }
 
-    // 4. Analyze each voice's motion, common tones, and tendency-tone resolutions
     let upperMotionTotal = 0;
     let commonTonesHeld = 0;
 
@@ -262,7 +246,222 @@ export class HarmonyFinder {
       let reason = "";
 
       if (v === 0) {
-        // Bass line
         if (delta === 0) reason = "Pedal / common bass retained";
         else if (Math.abs(delta) <= 2) reason = `Stepwise bass (${delta > 0 ? "up" : "down"})`;
-        else reason = `Root motion (${delta > 0 ? "+"
+        else reason = `Root motion (${delta > 0 ? "+" : ""}${delta} st)`;
+      } else {
+        upperMotionTotal += Math.abs(delta);
+        if (Math.abs(delta) === 6 || Math.abs(delta) > 7) {
+          cost += 45;
+        }
+
+        if (prevChroma === leadingToneChroma && currChroma === tonicChroma && delta === 1) {
+          cost -= 8;
+          reason = "Leading tone (7̂) resolves up by half-step to tonic";
+        } else if (prevChroma === leadingToneChroma && v === 3 && currChroma !== tonicChroma) {
+          cost += 50;
+          reason = "Soprano leap from leading tone";
+        } else if (prev.seventhChroma !== null && prevChroma === prev.seventhChroma) {
+          if (delta === -1 || delta === -2) {
+            cost -= 8;
+            reason = "Chordal 7th resolves down by step";
+          } else if (delta === 0) {
+            reason = "Chordal 7th held as common tone";
+          } else {
+            cost += 45;
+            reason = "Chordal 7th leap";
+          }
+        } else if (delta === 0) {
+          cost -= 4;
+          commonTonesHeld++;
+          reason = "Common tone held stationary";
+        } else if (Math.abs(delta) <= 2) {
+          cost -= 2;
+          reason = `Smooth step ${delta > 0 ? "up" : "down"} (${Math.abs(delta) === 1 ? "half-step" : "whole-step"})`;
+        } else {
+          reason = `Chord-tone leap (${delta > 0 ? "up" : "down"})`;
+        }
+      }
+
+      voiceExplanations.push({
+        voice: VOICE_NAMES[v],
+        from: fromNote,
+        to: toNote,
+        reason,
+      });
+    }
+
+    cost += upperMotionTotal * 2;
+
+    if (commonTonesHeld > 0) {
+      ruleChecks.push(`✓ ${commonTonesHeld} common tone${commonTonesHeld > 1 ? "s" : ""} retained`);
+    }
+    if (bassMove !== 0 && sopMove !== 0 && Math.sign(bassMove) !== Math.sign(sopMove)) {
+      ruleChecks.push("✓ Contrary motion between Bass & Soprano");
+    }
+
+    return { cost, voiceExplanations, ruleChecks };
+  }
+
+  _solveProgressionSATB(steps, tonic, scaleType) {
+    const tonicChroma = Tonal.Note.chroma(tonic);
+    const leadingToneChroma = (tonicChroma + 11) % 12;
+
+    const candidatesPerStep = steps.map((s) =>
+      this._generateLegalSATBVoicings(s.symbol, leadingToneChroma)
+    );
+
+    if (candidatesPerStep.some((list) => list.length === 0)) {
+      return steps.map((s) => ({
+        ...s,
+        voices: Tonal.Chord.get(s.symbol).notes.map((n, i) => `${n}${i === 0 ? 3 : 4}`),
+        transition: null,
+      }));
+    }
+
+    const dpCost = candidatesPerStep.map((list) => new Array(list.length).fill(Infinity));
+    const dpBack = candidatesPerStep.map((list) => new Array(list.length).fill(-1));
+    const dpInfo = candidatesPerStep.map((list) => new Array(list.length).fill(null));
+
+    candidatesPerStep[0].forEach((cand, idx) => {
+      const idealDist = Math.abs(cand.midis[3] - 69) + Math.abs(cand.midis[0] - 48);
+      dpCost[0][idx] = cand.internalPenalty + idealDist * 0.5;
+    });
+
+    for (let stepIdx = 1; stepIdx < steps.length; stepIdx++) {
+      const prevList = candidatesPerStep[stepIdx - 1];
+      const currList = candidatesPerStep[stepIdx];
+
+      for (let cIdx = 0; cIdx < currList.length; cIdx++) {
+        for (let pIdx = 0; pIdx < prevList.length; pIdx++) {
+          if (dpCost[stepIdx - 1][pIdx] === Infinity) continue;
+          const evalRes = this._evaluateTransition(
+            prevList[pIdx],
+            currList[cIdx],
+            leadingToneChroma,
+            tonicChroma
+          );
+          const total = dpCost[stepIdx - 1][pIdx] + evalRes.cost;
+          if (total < dpCost[stepIdx][cIdx]) {
+            dpCost[stepIdx][cIdx] = total;
+            dpBack[stepIdx][cIdx] = pIdx;
+            dpInfo[stepIdx][cIdx] = evalRes;
+          }
+        }
+      }
+    }
+
+    const lastStep = steps.length - 1;
+    let bestIdx = 0;
+    for (let i = 1; i < dpCost[lastStep].length; i++) {
+      if (dpCost[lastStep][i] < dpCost[lastStep][bestIdx]) {
+        bestIdx = i;
+      }
+    }
+
+    const solved = new Array(steps.length);
+    let cursor = bestIdx;
+    for (let s = lastStep; s >= 0; s--) {
+      solved[s] = {
+        ...steps[s],
+        voices: candidatesPerStep[s][cursor].voices,
+        transition: s > 0 ? dpInfo[s][cursor] : null,
+      };
+      cursor = dpBack[s][cursor];
+    }
+
+    return solved;
+  }
+
+  analyzeExercise(exercise) {
+    if (!exercise || !exercise.notes || exercise.notes.length < 2) {
+      return { chords: [] };
+    }
+
+    const tonic = exercise.activeKeyTonic || Tonal.Note.pitchClass(exercise.notes[0]);
+    const scaleType = exercise.scaleType || "major";
+    const scaleNotes = this._getScaleNotes(tonic, scaleType);
+    if (scaleNotes.length < 7) return { chords: [] };
+
+    const degreeTable = scaleType === "minor" ? MINOR_DEGREES : MAJOR_DEGREES;
+    const progTable = scaleType === "minor" ? MINOR_PROGRESSIONS : MAJOR_PROGRESSIONS;
+
+    const sortedNotes = [...exercise.notes].sort(
+      (a, b) => Tonal.Note.midi(a) - Tonal.Note.midi(b)
+    );
+    const pc1 = Tonal.Note.pitchClass(sortedNotes[0]);
+    const pc2 = Tonal.Note.pitchClass(sortedNotes[1]);
+    const chroma1 = Tonal.Note.chroma(pc1);
+    const chroma2 = Tonal.Note.chroma(pc2);
+
+    const matches = [];
+
+    ["triad", "seventh"].forEach((tier) => {
+      degreeTable.forEach((degObj, idx) => {
+        const rootPc = scaleNotes[idx];
+        const suffix = tier === "triad" ? degObj.triadSuffix : degObj.seventhSuffix;
+        const symbol = `${rootPc}${suffix}`;
+        const roman =
+          tier === "seventh" && !degObj.roman.includes("7") && !degObj.roman.includes("ø")
+            ? `${degObj.roman}7`
+            : degObj.roman;
+
+        const chordInfo = Tonal.Chord.get(symbol);
+        const chordTones = chordInfo.notes || [];
+        const chromas = chordTones.map((n) => Tonal.Note.chroma(n));
+
+        const idx1 = chromas.indexOf(chroma1);
+        const idx2 = chromas.indexOf(chroma2);
+
+        if (idx1 !== -1 && idx2 !== -1) {
+          const roleDesc = `${pc1} (${ROLE_LABELS[idx1] || "tone"}) + ${pc2} (${ROLE_LABELS[idx2] || "tone"})`;
+          const rawProgs = progTable[degObj.degree] || [];
+
+          const singleSolved = this._solveProgressionSATB(
+            [{ symbol, roman, isTarget: true }],
+            tonic,
+            scaleType
+          )[0];
+
+          const progressions = rawProgs.map((p) => {
+            const rawSteps = p.degrees.map((degNum) => {
+              const stepDegObj = degreeTable[degNum - 1];
+              const stepRoot = scaleNotes[degNum - 1];
+              const isTargetDeg = degNum === degObj.degree;
+              const stepSuffix = isTargetDeg
+                ? suffix
+                : degNum === 5 && scaleType === "major"
+                ? "7"
+                : stepDegObj.triadSuffix;
+              return {
+                symbol: `${stepRoot}${stepSuffix}`,
+                roman: isTargetDeg ? roman : stepDegObj.roman,
+                isTarget: isTargetDeg,
+              };
+            });
+
+            return {
+              label: p.label,
+              steps: this._solveProgressionSATB(rawSteps, tonic, scaleType),
+            };
+          });
+
+          matches.push({
+            id: `${symbol}-${tier}`,
+            symbol,
+            roman,
+            tier,
+            roleDesc,
+            voices: singleSolved.voices,
+            progressions,
+          });
+        }
+      });
+    });
+
+    return {
+      keyLabel: exercise.activeKeyLabel || `${tonic} ${scaleType}`,
+      chords: matches.slice(0, 3),
+    };
+  }
+}
