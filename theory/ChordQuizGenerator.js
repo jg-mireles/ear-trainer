@@ -1,5 +1,5 @@
 // theory/ChordQuizGenerator.js
-// Generates single-chord & inversion exercises with smooth voice-led resolutions & rule explanations
+// Single-chord & inversion generator with voice-led resolutions
 
 export const CHORD_TYPES = [
   { id: "M", label: "Major", tonal: "", intervals: ["1P", "3M", "5P"], category: "triad" },
@@ -76,21 +76,17 @@ export class ChordQuizGenerator {
 
   buildResolution(rootNote, chordDef, voicedNotes) {
     let targetRoot = null;
-    let targetLabel = "";
-
     if (chordDef.id === "sus4" || chordDef.id === "sus2") {
       targetRoot = rootNote;
-      targetLabel = Tonal.Note.pitchClass(targetRoot) + " Major (I)";
     } else if (chordDef.id === "7" || chordDef.id === "aug") {
       targetRoot = Tonal.Note.transpose(rootNote, "4P");
-      targetLabel = Tonal.Note.pitchClass(targetRoot) + " Major (I)";
     } else if (chordDef.id === "dim" || chordDef.id === "dim7" || chordDef.id === "m7b5") {
       targetRoot = Tonal.Note.transpose(rootNote, "2m");
-      targetLabel = Tonal.Note.pitchClass(targetRoot) + " Major (I)";
     } else {
       return null;
     }
 
+    const targetLabel = Tonal.Note.pitchClass(targetRoot) + " Major (I)";
     const tonicPc = Tonal.Note.pitchClass(targetRoot);
     const thirdPc = Tonal.Note.pitchClass(Tonal.Note.transpose(targetRoot, "3M"));
     const fifthPc = Tonal.Note.pitchClass(Tonal.Note.transpose(targetRoot, "5P"));
