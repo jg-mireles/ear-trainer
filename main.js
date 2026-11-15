@@ -1,11 +1,11 @@
 // main.js
 // Orchestrates Audio, Theory, Notation, and UI modules
 
-import { SoundEngine } from "./audio/SoundEngine.js?v=29";
-import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=29";
-import { StaffRenderer } from "./notation/StaffRenderer.js?v=29";
-import { ControlsPanel } from "./ui/ControlsPanel.js?v=29";
-import { HarmonyContextDrawer } from "./ui/HarmonyContextDrawer.js?v=29";
+import { SoundEngine } from "./audio/SoundEngine.js?v=30";
+import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=30";
+import { StaffRenderer } from "./notation/StaffRenderer.js?v=30";
+import { ControlsPanel } from "./ui/ControlsPanel.js?v=30";
+import { HarmonyContextDrawer } from "./ui/HarmonyContextDrawer.js?v=30";
 
 const statusBadge = document.getElementById("status-badge");
 const feedbackText = document.getElementById("feedback-text");
@@ -13,14 +13,12 @@ const quizGrid = document.getElementById("quiz-grid");
 const contextBtn = document.getElementById("btn-context");
 const harmonyContainer = document.getElementById("harmony-context-container");
 
-// 1. Initialize Core Modules
 const engine = new SoundEngine(() => {
   statusBadge.textContent = "Piano Samples Ready";
 });
 const generator = new IntervalGenerator();
 const staff = new StaffRenderer("staff-container");
 
-// Draw initial Piano Grand Staff with C Major right away
 staff.renderEmptyStaff(generator.getVexKeySignature("C", "major"));
 
 let currentExercise = null;
@@ -81,8 +79,6 @@ async function playCurrentExercise(opts) {
   playbackTimers.push(timerId);
 }
 
-// Plays and draws in sync:
-// 1) Tonic Triad -> 2) 1-Octave Ascending Scale -> 3) Exercise Interval (Low -> High)
 async function playContextSequence() {
   if (!currentExercise) return;
   clearPlaybackTimers();
@@ -98,7 +94,6 @@ async function playContextSequence() {
   const pauseAfterChord = 0.25;
   const pauseAfterScale = 0.35;
 
-  // 1. Tonic Triad (Audio + Grand Staff)
   feedbackText.textContent = `Context 1/3 — Tonic Triad (${seq.triad.join(" - ")})`;
   staff.renderNotes(seq.triad, "harmonic", keySig);
   engine.playChord(seq.triad, {
@@ -106,7 +101,6 @@ async function playContextSequence() {
     duration: chordDuration,
   });
 
-  // 2. 1-Octave Ascending Scale (Audio + Grand Staff)
   const scaleTimer = setTimeout(() => {
     feedbackText.textContent = `Context 2/3 — Ascending Scale (${seq.ascendingScale.join(" → ")})`;
     staff.renderNotes(seq.ascendingScale, "melodic", keySig);
@@ -119,7 +113,6 @@ async function playContextSequence() {
   }, (chordDuration + pauseAfterChord) * 1000);
   playbackTimers.push(scaleTimer);
 
-  // 3. Target Exercise Interval Lower -> Higher (Audio + Grand Staff)
   const intervalTimer = setTimeout(() => {
     feedbackText.textContent = `Context 3/3 — Target Interval: ${currentExercise.interval.name} (${seq.intervalAscending.join(" → ")}) [${currentExercise.activeKeyLabel}]`;
     staff.renderNotes(seq.intervalAscending, "melodic", keySig);
@@ -132,7 +125,6 @@ async function playContextSequence() {
   playbackTimers.push(intervalTimer);
 }
 
-// 2. Initialize Collapsible Harmony Context Drawer
 const harmonyDrawer = new HarmonyContextDrawer(harmonyContainer, {
   onPlayChord: async (chordObj) => {
     if (!currentExercise || !chordObj) return;
@@ -140,9 +132,9 @@ const harmonyDrawer = new HarmonyContextDrawer(harmonyContainer, {
     await ensureAudioReady();
 
     const beat = controls.getStaggerSeconds();
-    feedbackText.textContent = `Chord Context — ${chordObj.symbol} (${chordObj.roman}): ${chordObj.roleDesc}`;
-    staff.renderNotes(chordObj.notes, "harmonic", currentExercise.keySignature);
-    engine.playChord(chordObj.notes, {
+    feedbackText.textContent = `4-Part Chord — ${chordObj.symbol} (${chordObj.roman}): ${chordObj.roleDesc}`;
+    staff.renderProgressionSATB([chordObj], 0, currentExercise.keySignature);
+    engine.playChord(chordObj.voices, {
       mode: "harmonic",
       duration: Math.max(1.4, beat * 2),
     });
@@ -152,18 +144,30 @@ const harmonyDrawer = new HarmonyContextDrawer(harmonyContainer, {
     clearPlaybackTimers();
     await ensureAudioReady();
 
-    const stepSec = Math.max(0.75, controls.getStaggerSeconds() * 1.4);
+    const stepSec = Math.max(0.85, controls.getStaggerSeconds() * 1.45);
     const keySig = currentExercise.keySignature;
 
     prog.steps.forEach((step, idx) => {
       const timerId = setTimeout(() => {
-        const star = step.isTarget ? " ★ (Contains your interval)" : "";
-        feedbackText.textContent = `Progression (${prog.label}) — ${step.symbol} (${step.roman})${star}`;
-        staff.renderNotes(step.notes, "harmonic", keySig);
-        engine.playChord(step.notes, {
+        const star = step.isTarget ? " ★ (Target interval)" : "";
+        feedbackText.textContent = `Bar ${idx + 1}/${prog.steps.length} (${prog.label}) — ${step.symbol} (${step.roman})${star}`;
+
+        // Add each new bar to the score as it plays while keeping all prior bars on the staff
+        const visibleBars = prog.steps.slice(0, idx + 1);
+        staff.renderProgressionSATB(visibleBars, idx, keySig);
+
+        engine.playChord(step.voices, {
           mode: "harmonic",
           duration: stepSec * 0.92,
         });
+
+        // Clear active blue highlight once the final chord finishes ringing
+        if (idx === prog.steps.length - 1) {
+          const finishTimer = setTimeout(() => {
+            staff.renderProgressionSATB(prog.steps, -1, keySig);
+          }, stepSec * 950);
+          playbackTimers.push(finishTimer);
+        }
       }, idx * stepSec * 1000);
 
       playbackTimers.push(timerId);
@@ -171,7 +175,6 @@ const harmonyDrawer = new HarmonyContextDrawer(harmonyContainer, {
   },
 });
 
-// 3. Initialize Controls Panel
 const controls = new ControlsPanel(
   document.getElementById("controls-container"),
   engine.synth,
@@ -200,7 +203,6 @@ const controls = new ControlsPanel(
         scaleType: opts.scaleType,
       });
 
-      // Immediately draw the active key signature (sharps/flats) on the Piano Grand Staff
       staff.renderEmptyStaff(currentExercise.keySignature);
       contextBtn.classList.add("hidden");
 
@@ -229,7 +231,6 @@ const controls = new ControlsPanel(
   }
 );
 
-// 4. Build Interval Answer Buttons
 function buildQuizButtons() {
   quizGrid.innerHTML = INTERVALS.map(
     (int) => `<button type="button" class="quiz-btn" data-id="${int.id}">${int.name}</button>`
