@@ -1,5 +1,5 @@
 // theory/HarmonyFinder.js
-// Finds diatonic triads & 7th chords containing both interval notes,
+// Finds diatonic triads & 7th chords containing both interval notes (in a single key OR inferred across all keys in Chromatic mode),
 // solves 4-part SATB voice leading without parallel 5ths/8ves, and logs rule explanations
 
 const MAJOR_DEGREES = [
@@ -84,10 +84,36 @@ const MINOR_PROGRESSIONS = {
   ],
 };
 
+const CANDIDATE_KEYS = [
+  { tonic: "C", scaleType: "major", vexSig: "C" },
+  { tonic: "G", scaleType: "major", vexSig: "G" },
+  { tonic: "D", scaleType: "major", vexSig: "D" },
+  { tonic: "A", scaleType: "major", vexSig: "A" },
+  { tonic: "E", scaleType: "major", vexSig: "E" },
+  { tonic: "B", scaleType: "major", vexSig: "B" },
+  { tonic: "F#", scaleType: "major", vexSig: "F#" },
+  { tonic: "Db", scaleType: "major", vexSig: "Db" },
+  { tonic: "Ab", scaleType: "major", vexSig: "Ab" },
+  { tonic: "Eb", scaleType: "major", vexSig: "Eb" },
+  { tonic: "Bb", scaleType: "major", vexSig: "Bb" },
+  { tonic: "F", scaleType: "major", vexSig: "F" },
+  { tonic: "A", scaleType: "minor", vexSig: "Am" },
+  { tonic: "E", scaleType: "minor", vexSig: "Em" },
+  { tonic: "B", scaleType: "minor", vexSig: "Bm" },
+  { tonic: "F#", scaleType: "minor", vexSig: "F#m" },
+  { tonic: "C#", scaleType: "minor", vexSig: "C#m" },
+  { tonic: "G#", scaleType: "minor", vexSig: "G#m" },
+  { tonic: "Eb", scaleType: "minor", vexSig: "Ebm" },
+  { tonic: "Bb", scaleType: "minor", vexSig: "Bbm" },
+  { tonic: "F", scaleType: "minor", vexSig: "Fm" },
+  { tonic: "C", scaleType: "minor", vexSig: "Cm" },
+  { tonic: "G", scaleType: "minor", vexSig: "Gm" },
+  { tonic: "D", scaleType: "minor", vexSig: "Dm" },
+];
+
 const ROLE_LABELS = ["Root", "3rd", "5th", "7th"];
 const VOICE_NAMES = ["Bass", "Tenor", "Alto", "Soprano"];
 
-// Vocal MIDI ranges: [Bass, Tenor, Alto, Soprano]
 const VOICE_RANGES = [
   { min: 40, max: 60 }, // Bass: E2–C4
   { min: 48, max: 67 }, // Tenor: C3–G4
@@ -303,7 +329,7 @@ export class HarmonyFinder {
     return { cost, voiceExplanations, ruleChecks };
   }
 
-  _solveProgressionSATB(steps, tonic, scaleType) {
+  _solveProgressionSATB(steps, tonic) {
     const tonicChroma = Tonal.Note.chroma(tonic);
     const leadingToneChroma = (tonicChroma + 11) % 12;
 
@@ -373,28 +399,15 @@ export class HarmonyFinder {
     return solved;
   }
 
-  analyzeExercise(exercise) {
-    if (!exercise || !exercise.notes || exercise.notes.length < 2) {
-      return { chords: [] };
-    }
-
-    const tonic = exercise.activeKeyTonic || Tonal.Note.pitchClass(exercise.notes[0]);
-    const scaleType = exercise.scaleType || "major";
+  _collectMatchesInKey({ tonic, scaleType, vexSig, pc1, pc2, chroma1, chroma2, includeKeyBadge }) {
     const scaleNotes = this._getScaleNotes(tonic, scaleType);
-    if (scaleNotes.length < 7) return { chords: [] };
+    if (scaleNotes.length < 7) return [];
 
     const degreeTable = scaleType === "minor" ? MINOR_DEGREES : MAJOR_DEGREES;
     const progTable = scaleType === "minor" ? MINOR_PROGRESSIONS : MAJOR_PROGRESSIONS;
+    const keyDisplay = `${tonic} ${scaleType === "minor" ? "Minor" : "Major"}`;
 
-    const sortedNotes = [...exercise.notes].sort(
-      (a, b) => Tonal.Note.midi(a) - Tonal.Note.midi(b)
-    );
-    const pc1 = Tonal.Note.pitchClass(sortedNotes[0]);
-    const pc2 = Tonal.Note.pitchClass(sortedNotes[1]);
-    const chroma1 = Tonal.Note.chroma(pc1);
-    const chroma2 = Tonal.Note.chroma(pc2);
-
-    const matches = [];
+    const found = [];
 
     ["triad", "seventh"].forEach((tier) => {
       degreeTable.forEach((degObj, idx) => {
@@ -414,13 +427,13 @@ export class HarmonyFinder {
         const idx2 = chromas.indexOf(chroma2);
 
         if (idx1 !== -1 && idx2 !== -1) {
-          const roleDesc = `${pc1} (${ROLE_LABELS[idx1] || "tone"}) + ${pc2} (${ROLE_LABELS[idx2] || "tone"})`;
+          const contextPrefix = includeKeyBadge ? `[In ${keyDisplay}] ` : "";
+          const roleDesc = `${contextPrefix}${pc1} (${ROLE_LABELS[idx1] || "tone"}) + ${pc2} (${ROLE_LABELS[idx2] || "tone"})`;
           const rawProgs = progTable[degObj.degree] || [];
 
           const singleSolved = this._solveProgressionSATB(
             [{ symbol, roman, isTarget: true }],
-            tonic,
-            scaleType
+            tonic
           )[0];
 
           const progressions = rawProgs.map((p) => {
@@ -441,22 +454,115 @@ export class HarmonyFinder {
             });
 
             return {
-              label: p.label,
-              steps: this._solveProgressionSATB(rawSteps, tonic, scaleType),
+              label: includeKeyBadge ? `${keyDisplay}: ${p.label}` : p.label,
+              keySignature: vexSig,
+              steps: this._solveProgressionSATB(rawSteps, tonic),
             };
           });
 
-          matches.push({
-            id: `${symbol}-${tier}`,
+          found.push({
+            id: `${tonic}-${scaleType}-${symbol}-${tier}`,
             symbol,
-            roman,
+            roman: includeKeyBadge ? `${roman} in ${keyDisplay}` : roman,
             tier,
+            keySignature: vexSig,
             roleDesc,
             voices: singleSolved.voices,
             progressions,
           });
         }
       });
+    });
+
+    return found;
+  }
+
+  analyzeExercise(exercise) {
+    if (!exercise || !exercise.notes || exercise.notes.length < 2) {
+      return { chords: [] };
+    }
+
+    const sortedNotes = [...exercise.notes].sort(
+      (a, b) => Tonal.Note.midi(a) - Tonal.Note.midi(b)
+    );
+    const pc1 = Tonal.Note.pitchClass(sortedNotes[0]);
+    const pc2 = Tonal.Note.pitchClass(sortedNotes[1]);
+    const chroma1 = Tonal.Note.chroma(pc1);
+    const chroma2 = Tonal.Note.chroma(pc2);
+
+    // Option B: In Fully Chromatic mode, infer candidate keys where both notes are diatonic
+    if (exercise.isChromatic) {
+      const diatonicKeys = CANDIDATE_KEYS.filter((k) => {
+        const chromas = this._getScaleNotes(k.tonic, k.scaleType).map((n) =>
+          Tonal.Note.chroma(n)
+        );
+        return chromas.includes(chroma1) && chromas.includes(chroma2);
+      });
+
+      const pool = [];
+      const seenSymbols = new Set();
+
+      // Prioritize tonic/primary triads & 7ths across distinct inferred keys for rich reharmonization
+      diatonicKeys.forEach((k) => {
+        const keyMatches = this._collectMatchesInKey({
+          tonic: k.tonic,
+          scaleType: k.scaleType,
+          vexSig: k.vexSig,
+          pc1,
+          pc2,
+          chroma1,
+          chroma2,
+          includeKeyBadge: true,
+        });
+
+        for (const m of keyMatches) {
+          if (!seenSymbols.has(m.symbol)) {
+            seenSymbols.add(m.symbol);
+            pool.push(m);
+            break; // Take 1 distinct chord per inferred key first so you hear 3 different keys
+          }
+        }
+      });
+
+      // If fewer than 3 distinct keys matched (e.g. a Tritone only fits 1 Major & 1 Minor key), fill remaining slots
+      if (pool.length < 3) {
+        diatonicKeys.forEach((k) => {
+          const keyMatches = this._collectMatchesInKey({
+            tonic: k.tonic,
+            scaleType: k.scaleType,
+            vexSig: k.vexSig,
+            pc1,
+            pc2,
+            chroma1,
+            chroma2,
+            includeKeyBadge: true,
+          });
+          for (const m of keyMatches) {
+            if (pool.length < 3 && !pool.some((existing) => existing.id === m.id)) {
+              pool.push(m);
+            }
+          }
+        });
+      }
+
+      return {
+        keyLabel: "Inferred Keys (Chromatic Reharmonization)",
+        chords: pool.slice(0, 3),
+      };
+    }
+
+    // Standard Tonal Mode: analyze within the active key
+    const tonic = exercise.activeKeyTonic || pc1;
+    const scaleType = exercise.activeScaleType || exercise.scaleType || "major";
+    const matches = this._collectMatchesInKey({
+      tonic,
+      scaleType,
+      vexSig: exercise.keySignature,
+      pc1,
+      pc2,
+      chroma1,
+      chroma2,
+      includeKeyBadge: false,
     });
 
     return {
