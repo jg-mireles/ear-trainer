@@ -1,7 +1,7 @@
 // ui/ChordQuizPanel.js
 // Self-contained UI & answer deck for Single Chords & Inversions with resolution rule breakdown
 
-import { CHORD_TYPES, INVERSIONS } from "../theory/ChordQuizGenerator.js?v=33";
+import { CHORD_TYPES, INVERSIONS } from "../theory/ChordQuizGenerator.js?v=34";
 
 export class ChordQuizPanel {
   constructor(
