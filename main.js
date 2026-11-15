@@ -1,13 +1,13 @@
 // main.js
 // Orchestrates Audio, Theory, Notation, and UI modules (Intervals + Chords)
 
-import { SoundEngine } from "./audio/SoundEngine.js?v=32";
-import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=32";
-import { ChordQuizGenerator } from "./theory/ChordQuizGenerator.js?v=32";
-import { StaffRenderer } from "./notation/StaffRenderer.js?v=32";
-import { ControlsPanel } from "./ui/ControlsPanel.js?v=32";
-import { HarmonyContextDrawer } from "./ui/HarmonyContextDrawer.js?v=32";
-import { ChordQuizPanel } from "./ui/ChordQuizPanel.js?v=32";
+import { SoundEngine } from "./audio/SoundEngine.js?v=33";
+import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=33";
+import { ChordQuizGenerator } from "./theory/ChordQuizGenerator.js?v=33";
+import { StaffRenderer } from "./notation/StaffRenderer.js?v=33";
+import { ControlsPanel } from "./ui/ControlsPanel.js?v=33";
+import { HarmonyContextDrawer } from "./ui/HarmonyContextDrawer.js?v=33";
+import { ChordQuizPanel } from "./ui/ChordQuizPanel.js?v=33";
 
 const statusBadge = document.getElementById("status-badge");
 const feedbackText = document.getElementById("feedback-text");
