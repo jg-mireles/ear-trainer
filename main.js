@@ -1,11 +1,11 @@
 // main.js
 // Orchestrates Audio, Theory, Notation, and UI modules
 
-import { SoundEngine } from "./audio/SoundEngine.js?v=30";
-import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=30";
-import { StaffRenderer } from "./notation/StaffRenderer.js?v=30";
-import { ControlsPanel } from "./ui/ControlsPanel.js?v=30";
-import { HarmonyContextDrawer } from "./ui/HarmonyContextDrawer.js?v=30";
+import { SoundEngine } from "./audio/SoundEngine.js?v=31";
+import { IntervalGenerator, INTERVALS } from "./theory/IntervalGenerator.js?v=31";
+import { StaffRenderer } from "./notation/StaffRenderer.js?v=31";
+import { ControlsPanel } from "./ui/ControlsPanel.js?v=31";
+import { HarmonyContextDrawer } from "./ui/HarmonyContextDrawer.js?v=31";
 
 const statusBadge = document.getElementById("status-badge");
 const feedbackText = document.getElementById("feedback-text");
@@ -132,8 +132,9 @@ const harmonyDrawer = new HarmonyContextDrawer(harmonyContainer, {
     await ensureAudioReady();
 
     const beat = controls.getStaggerSeconds();
+    const activeSig = chordObj.keySignature || currentExercise.keySignature;
     feedbackText.textContent = `4-Part Chord — ${chordObj.symbol} (${chordObj.roman}): ${chordObj.roleDesc}`;
-    staff.renderProgressionSATB([chordObj], 0, currentExercise.keySignature);
+    staff.renderProgressionSATB([chordObj], 0, activeSig);
     engine.playChord(chordObj.voices, {
       mode: "harmonic",
       duration: Math.max(1.4, beat * 2),
@@ -145,26 +146,24 @@ const harmonyDrawer = new HarmonyContextDrawer(harmonyContainer, {
     await ensureAudioReady();
 
     const stepSec = Math.max(0.85, controls.getStaggerSeconds() * 1.45);
-    const keySig = currentExercise.keySignature;
+    const activeSig = prog.keySignature || currentExercise.keySignature;
 
     prog.steps.forEach((step, idx) => {
       const timerId = setTimeout(() => {
         const star = step.isTarget ? " ★ (Target interval)" : "";
         feedbackText.textContent = `Bar ${idx + 1}/${prog.steps.length} (${prog.label}) — ${step.symbol} (${step.roman})${star}`;
 
-        // Add each new bar to the score as it plays while keeping all prior bars on the staff
         const visibleBars = prog.steps.slice(0, idx + 1);
-        staff.renderProgressionSATB(visibleBars, idx, keySig);
+        staff.renderProgressionSATB(visibleBars, idx, activeSig);
 
         engine.playChord(step.voices, {
           mode: "harmonic",
           duration: stepSec * 0.92,
         });
 
-        // Clear active blue highlight once the final chord finishes ringing
         if (idx === prog.steps.length - 1) {
           const finishTimer = setTimeout(() => {
-            staff.renderProgressionSATB(prog.steps, -1, keySig);
+            staff.renderProgressionSATB(prog.steps, -1, activeSig);
           }, stepSec * 950);
           playbackTimers.push(finishTimer);
         }
@@ -182,7 +181,10 @@ const controls = new ControlsPanel(
     onKeyChange: (keyTonic, scaleType) => {
       clearPlaybackTimers();
       harmonyDrawer.reset();
-      if (keyTonic === "random") {
+      if (keyTonic === "chromatic") {
+        staff.setKeySignature(null);
+        feedbackText.textContent = "Fully Chromatic active — any starting note & interval. Click 'New Interval' to start.";
+      } else if (keyTonic === "random") {
         staff.setKeySignature(null);
         feedbackText.textContent = "Random Key active — click 'New Interval' to draw a key.";
       } else {
@@ -206,9 +208,13 @@ const controls = new ControlsPanel(
       staff.renderEmptyStaff(currentExercise.keySignature);
       contextBtn.classList.add("hidden");
 
-      const roleLabel =
-        opts.direction === "descending" ? "Higher Note" : "Lower Note";
-      feedbackText.textContent = `Key: ${currentExercise.activeKeyLabel} (Tonic ${currentExercise.activeKeyTonic} = ${roleLabel}) — Listen and identify...`;
+      if (currentExercise.isChromatic) {
+        feedbackText.textContent = "Fully Chromatic (No fixed key) — Listen and identify the interval...";
+      } else {
+        const roleLabel =
+          opts.direction === "descending" ? "Higher Note" : "Lower Note";
+        feedbackText.textContent = `Key: ${currentExercise.activeKeyLabel} (Tonic ${currentExercise.activeKeyTonic} = ${roleLabel}) — Listen and identify...`;
+      }
 
       resetQuizButtons();
       playCurrentExercise(opts);
@@ -277,7 +283,7 @@ function handleGuess(btn) {
     revealAnswer();
   } else {
     btn.classList.add("wrong");
-    feedbackText.textContent = `Not quite (${btn.textContent}) [Active Key: ${currentExercise.activeKeyLabel}]. Try again or click Reveal on Staff.`;
+    feedbackText.textContent = `Not quite (${btn.textContent}) [Mode: ${currentExercise.activeKeyLabel}]. Try again or click Reveal on Staff.`;
   }
 }
 
