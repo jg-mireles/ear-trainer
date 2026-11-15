@@ -2,7 +2,7 @@
 // Collapsible post-answer drawer showing 2-3 matching chords, playable SATB progressions,
 // and a collapsible SATB voice-leading rule breakdown
 
-import { HarmonyFinder } from "../theory/HarmonyFinder.js?v=30";
+import { HarmonyFinder } from "../theory/HarmonyFinder.js?v=31";
 
 export class HarmonyContextDrawer {
   constructor(containerEl, { onPlayChord, onPlayProgression } = {}) {
